@@ -10,6 +10,7 @@ export interface Conversation {
   last_message_at: string | null
   created_at: string
   assigned_to_name: string | null
+  tags: string[]
 }
 
 export interface Message {

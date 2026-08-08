@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getCannedResponses } from '@/api/cannedResponses'
-import { getConversations, updateConversationStatus } from '@/api/conversations'
+import { getConversations, updateConversationStatus, updateConversationTags } from '@/api/conversations'
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { useAuthStore } from '@/store/authStore'
@@ -163,6 +163,23 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
       if (ctx?.prev) queryClient.setQueryData(['conversations'], ctx.prev)
     },
   })
+
+  const { mutate: saveTags } = useMutation({
+    mutationFn: (tags: string[]) => updateConversationTags(conversationId, tags),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['conversations'] }),
+  })
+  const [tagInput, setTagInput] = useState('')
+  const addTag = (e: FormEvent) => {
+    e.preventDefault()
+    const tag = tagInput.trim()
+    if (!tag || !conv || conv.tags.includes(tag)) { setTagInput(''); return }
+    saveTags([...conv.tags, tag])
+    setTagInput('')
+  }
+  const removeTag = (tag: string) => {
+    if (!conv) return
+    saveTags(conv.tags.filter((t) => t !== tag))
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -382,6 +399,41 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
                 }`}>{conv.status}</span>
               ) : '—'
             } />
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-zinc-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-zinc-100">
+            <p className="text-xs font-semibold text-zinc-900 uppercase tracking-wide">Tags</p>
+          </div>
+          <div className="p-4 flex flex-col gap-2.5">
+            {conv && conv.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {conv.tags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 text-[11px] font-medium bg-zinc-100 text-zinc-600 rounded-full pl-2 pr-1 py-0.5">
+                    #{tag}
+                    <button
+                      onClick={() => removeTag(tag)}
+                      className="text-zinc-400 hover:text-red-500 leading-none"
+                      aria-label={`Remove tag ${tag}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <form onSubmit={addTag}>
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                placeholder="Add a tag…"
+                disabled={!conv}
+                className="w-full text-xs bg-zinc-50 rounded-lg px-2.5 py-1.5 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200 disabled:opacity-50"
+              />
+            </form>
           </div>
         </div>
 

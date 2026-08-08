@@ -17,6 +17,10 @@ class UpdateConversationStatusRequest(BaseModel):
     status: ConversationStatus
 
 
+class UpdateConversationTagsRequest(BaseModel):
+    tags: list[str]
+
+
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -28,3 +32,4 @@ class ConversationResponse(BaseModel):
     last_message_at: datetime | None
     created_at: datetime
     assigned_to_name: str | None = None
+    tags: list[str] = []

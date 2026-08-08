@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -48,6 +48,10 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     # doesn't re-notify the team every poll cycle for the same silence.
     waiting_alert_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(String(50)), nullable=False, default=list, server_default="{}"
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(

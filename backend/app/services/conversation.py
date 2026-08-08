@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,6 +34,8 @@ async def get_conversations(
     db: AsyncSession,
     organization_id: uuid.UUID,
     status: ConversationStatus | None = None,
+    tag: str | None = None,
+    search: str | None = None,
 ) -> list[Conversation]:
     q = (
         select(Conversation)
@@ -42,6 +44,18 @@ async def get_conversations(
     )
     if status is not None:
         q = q.where(Conversation.status == status)
+    if tag:
+        q = q.where(Conversation.tags.any(tag))
+    if search:
+        like = f"%{search}%"
+        matching_conversation_ids = select(Message.conversation_id).where(Message.content.ilike(like))
+        q = q.where(
+            or_(
+                Conversation.visitor_name.ilike(like),
+                Conversation.visitor_email.ilike(like),
+                Conversation.id.in_(matching_conversation_ids),
+            )
+        )
     q = q.order_by(
         Conversation.last_message_at.desc().nulls_last(),
         Conversation.created_at.desc(),
@@ -79,6 +93,33 @@ async def update_conversation_status(
     if conv is None:
         return None
     conv.status = new_status
+    await db.commit()
+    await db.refresh(conv)
+    return conv
+
+
+async def update_conversation_tags(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    tags: list[str],
+) -> Conversation | None:
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.id == conversation_id)
+        .options(selectinload(Conversation.assigned_to))
+    )
+    conv = result.scalar_one_or_none()
+    if conv is None:
+        return None
+    # Normalize: trim, drop empties, dedupe while preserving order.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for tag in tags:
+        t = tag.strip()
+        if t and t not in seen:
+            seen.add(t)
+            cleaned.append(t)
+    conv.tags = cleaned
     await db.commit()
     await db.refresh(conv)
     return conv

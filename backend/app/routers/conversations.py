@@ -9,7 +9,12 @@ from app.core.limiter import limiter
 from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import ConversationStatus
 from app.models.user import User
-from app.schemas.conversation import ConversationResponse, CreateConversationRequest, UpdateConversationStatusRequest
+from app.schemas.conversation import (
+    ConversationResponse,
+    CreateConversationRequest,
+    UpdateConversationStatusRequest,
+    UpdateConversationTagsRequest,
+)
 from app.schemas.message import MessageResponse
 from app.services.conversation import (
     create_conversation,
@@ -17,6 +22,7 @@ from app.services.conversation import (
     get_conversations,
     mark_visitor_messages_read,
     update_conversation_status,
+    update_conversation_tags,
 )
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_widget_key
@@ -53,10 +59,12 @@ async def create(
 @router.get("", response_model=list[ConversationResponse])
 async def list_all(
     status: ConversationStatus | None = None,
+    tag: str | None = None,
+    q: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ConversationResponse]:
-    return await get_conversations(db, current_user.organization_id, status)
+    return await get_conversations(db, current_user.organization_id, status, tag, q)
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -90,6 +98,26 @@ async def update_status(
         str(conversation_id),
         {"type": "status", "status": body.status.value},
     )
+    await ws_manager.broadcast(
+        org_room(updated.organization_id),
+        {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},
+    )
+    return updated
+
+
+@router.patch("/{conversation_id}/tags", response_model=ConversationResponse)
+async def update_tags(
+    conversation_id: uuid.UUID,
+    body: UpdateConversationTagsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConversationResponse:
+    conv = await get_conversation(db, conversation_id)
+    if not conv or conv.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    updated = await update_conversation_tags(db, conversation_id, body.tags)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     await ws_manager.broadcast(
         org_room(updated.organization_id),
         {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},

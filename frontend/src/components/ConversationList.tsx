@@ -46,23 +46,59 @@ interface Props {
 
 export default function ConversationList({ activeId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [search, setSearch] = useState('')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const trimmedSearch = search.trim()
 
+  // The dashboard WebSocket (useDashboardSocket) keeps this live; refetchInterval
+  // is just a safety net in case that connection drops silently.
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['conversations'],
     queryFn: () => getConversations(),
-    // The dashboard WebSocket (useDashboardSocket) keeps this live; this is
-    // just a safety net in case that connection drops silently.
     refetchInterval: 60_000,
   })
 
-  const filtered = filter === 'all'
-    ? conversations
-    : conversations.filter((c) => c.status === filter)
+  // Full-text search hits the backend (message content isn't in the list
+  // payload) and lives in its own cache entry so it never fights the
+  // WebSocket-driven ['conversations'] list.
+  const { data: searchResults, isFetching: searching } = useQuery({
+    queryKey: ['conversations-search', trimmedSearch],
+    queryFn: () => getConversations({ q: trimmedSearch }),
+    enabled: trimmedSearch.length > 0,
+  })
+
+  const base = trimmedSearch ? (searchResults ?? []) : conversations
+  const byStatus = filter === 'all' ? base : base.filter((c) => c.status === filter)
+  const filtered = activeTag ? byStatus.filter((c) => c.tags.includes(activeTag)) : byStatus
 
   const waitingCount = conversations.filter((c) => c.status === 'waiting').length
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+
+      {/* Search */}
+      <div className="px-3 pt-1 pb-2 flex-shrink-0">
+        <div className="relative">
+          <svg className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, email, or message…"
+            className="w-full text-xs bg-zinc-100 rounded-lg pl-8 pr-3 py-1.5 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+          />
+        </div>
+        {activeTag && (
+          <button
+            onClick={() => setActiveTag(null)}
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium bg-brand-50 text-brand-700 rounded-full px-2 py-0.5"
+          >
+            #{activeTag} ×
+          </button>
+        )}
+      </div>
 
       {/* macOS-style segmented control */}
       <div className="px-3 pb-3 flex-shrink-0">
@@ -90,13 +126,13 @@ export default function ConversationList({ activeId, onSelect }: Props) {
 
       {/* Thread list */}
       <div className="flex-1 overflow-y-auto">
-        {isLoading && (
+        {(isLoading || (trimmedSearch && searching)) && (
           <div className="flex justify-center py-10">
             <div className="w-5 h-5 rounded-full border-2 border-zinc-200 border-t-zinc-500 animate-spin" />
           </div>
         )}
 
-        {!isLoading && filtered.length === 0 && (
+        {!isLoading && !searching && filtered.length === 0 && (
           <p className="text-xs text-zinc-400 text-center py-12">No conversations yet.</p>
         )}
 
@@ -106,6 +142,7 @@ export default function ConversationList({ activeId, onSelect }: Props) {
             conversation={c}
             isActive={c.id === activeId}
             onClick={() => onSelect(c.id)}
+            onTagClick={setActiveTag}
           />
         ))}
       </div>
@@ -117,10 +154,12 @@ function Row({
   conversation: c,
   isActive,
   onClick,
+  onTagClick,
 }: {
   conversation: Conversation
   isActive: boolean
   onClick: () => void
+  onTagClick: (tag: string) => void
 }) {
   const isWaiting = c.status === 'waiting'
 
@@ -160,6 +199,21 @@ function Row({
             ? <span className="text-indigo-500 font-medium">{c.assigned_to_name}</span>
             : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}
         </p>
+        {c.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {c.tags.map((tag) => (
+              <span
+                key={tag}
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); onTagClick(tag) }}
+                className="text-[10px] font-medium bg-zinc-100 hover:bg-brand-50 hover:text-brand-700 text-zinc-500 rounded-full px-1.5 py-0.5 transition-colors"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </button>
   )
