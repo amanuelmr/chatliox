@@ -16,6 +16,9 @@ async def create_message(
     sender_type: SenderType,
     sender_id: uuid.UUID | None = None,
     is_internal: bool = False,
+    attachment_url: str | None = None,
+    attachment_name: str | None = None,
+    attachment_mime: str | None = None,
 ) -> Message | None:
     conversation = await db.get(Conversation, conversation_id)
     if conversation is None:
@@ -30,6 +33,9 @@ async def create_message(
         content=content,
         is_read=sender_type == SenderType.ADMIN,
         is_internal=is_internal,
+        attachment_url=attachment_url,
+        attachment_name=attachment_name,
+        attachment_mime=attachment_mime,
     )
 
     # Internal notes don't affect conversation status or last_message_at

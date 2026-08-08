@@ -10,7 +10,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { createConversation, getVisitorConversationStatus } from '@/api/conversations'
-import { getVisitorMessages, sendMessage } from '@/api/messages'
+import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/messages'
+import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 
@@ -358,6 +359,9 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           is_read: false,
           is_internal: false,
           created_at: new Date().toISOString(),
+          attachment_url: null,
+          attachment_name: null,
+          attachment_mime: null,
         },
       ])
       return { prev, tempId }
@@ -383,6 +387,24 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     setContent('')
     if (convStatus === 'closed') onStatusChange('waiting')
     send({ conversation_id: conversationId, content: text, sender_type: 'visitor' })
+  }
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { mutate: upload, isPending: uploading } = useMutation({
+    mutationFn: uploadAttachment,
+    onSuccess: (message) => {
+      queryClient.setQueryData<Message[]>(['widget-messages', conversationId], (prev = []) =>
+        prev.some((m) => m.id === message.id) ? prev : [...prev, message]
+      )
+    },
+  })
+
+  const handleFilePicked = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (convStatus === 'closed') onStatusChange('waiting')
+    upload({ conversation_id: conversationId, sender_type: 'visitor', file })
   }
 
   if (messagesUnavailable) return <UnavailableState />
@@ -449,6 +471,26 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
         onSubmit={handleSubmit}
         className="bg-white border-t border-zinc-200 px-3 py-2.5 flex items-end gap-2 flex-shrink-0"
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain"
+          className="hidden"
+          onChange={handleFilePicked}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          aria-label="Attach a file"
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all duration-150 disabled:opacity-40"
+        >
+          {uploading ? <Spinner size="xs" variant="muted" /> : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32" />
+            </svg>
+          )}
+        </button>
         <textarea
           value={content}
           onChange={handleContentChange}
@@ -499,6 +541,32 @@ function UnavailableState() {
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
+function WidgetAttachment({ message }: { message: Message }) {
+  if (!message.attachment_url) return null
+  const url = resolveAttachmentUrl(message.attachment_url)
+
+  if (isImageAttachment(message.attachment_mime)) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="block mb-1">
+        <img
+          src={url}
+          alt={message.attachment_name ?? 'attachment'}
+          className="rounded-lg max-h-48 max-w-full object-cover"
+        />
+      </a>
+    )
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 underline underline-offset-2">
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32" />
+      </svg>
+      <span className="truncate">{message.attachment_name}</span>
+    </a>
+  )
+}
+
 function WidgetBubble({ message }: { message: Message }) {
   const isVisitor = message.sender_type === 'visitor'
   const isPending = message.id.startsWith('opt-')
@@ -510,7 +578,9 @@ function WidgetBubble({ message }: { message: Message }) {
           ? 'bg-brand-500 text-white'
           : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
       }`}>
-        <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+        {message.attachment_url ? <WidgetAttachment message={message} /> : (
+          <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+        )}
         <p className={`text-xs mt-1 text-right ${isVisitor ? 'text-brand-100' : 'text-zinc-400'}`}>
           {isPending ? '···' : formatTime(message.created_at)}
         </p>

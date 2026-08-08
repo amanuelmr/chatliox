@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getConversations, updateConversationStatus } from '@/api/conversations'
-import { getMessages, sendMessage } from '@/api/messages'
+import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
+import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import Spinner from '@/components/Spinner'
@@ -126,6 +127,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
           is_read: true,
           is_internal: vars.is_internal ?? false,
           created_at: new Date().toISOString(),
+          attachment_url: null,
+          attachment_name: null,
+          attachment_mime: null,
         },
       ])
       return { prev, tempId }
@@ -166,6 +170,24 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     if (mode === 'reply') { if (typingTimer.current) clearTimeout(typingTimer.current); sendTyping(false) }
     setContent('')
     send({ conversation_id: conversationId, content: text, sender_type: 'admin', is_internal: mode === 'note' })
+  }
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { mutate: upload, isPending: uploading } = useMutation({
+    mutationFn: uploadAttachment,
+    onSuccess: (message) => {
+      queryClient.setQueryData<Message[]>(['messages', conversationId], (prev = []) =>
+        prev.some((m) => m.id === message.id) ? prev : [...prev, message]
+      )
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    },
+  })
+
+  const handleFilePicked = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || resolved) return
+    upload({ conversation_id: conversationId, sender_type: 'admin', file, is_internal: mode === 'note' })
   }
 
   return (
@@ -269,6 +291,26 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
               )}
             </div>
             <form onSubmit={submit} className="flex items-end gap-3 px-4 pb-4 pt-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain"
+                className="hidden"
+                onChange={handleFilePicked}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || resolved}
+                title="Attach a file"
+                className="flex-shrink-0 w-10 h-[46px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all duration-150 disabled:opacity-40"
+              >
+                {uploading ? <Spinner size="xs" variant="muted" /> : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                  </svg>
+                )}
+              </button>
               <textarea
                 value={content}
                 onChange={onChange}
@@ -403,6 +445,32 @@ function ActionBtn({ children, onClick, disabled = false, icon }: { children: Re
   )
 }
 
+function AttachmentBlock({ message }: { message: Message }) {
+  if (!message.attachment_url) return null
+  const url = resolveAttachmentUrl(message.attachment_url)
+
+  if (isImageAttachment(message.attachment_mime)) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="block mb-1">
+        <img
+          src={url}
+          alt={message.attachment_name ?? 'attachment'}
+          className="rounded-lg max-h-56 max-w-full object-cover"
+        />
+      </a>
+    )
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 underline underline-offset-2">
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32" />
+      </svg>
+      <span className="truncate text-sm">{message.attachment_name}</span>
+    </a>
+  )
+}
+
 function Bubble({ message: m }: { message: Message }) {
   const isAdmin = m.sender_type === 'admin'
   const isPending = m.id.startsWith('opt-')
@@ -422,7 +490,9 @@ function Bubble({ message: m }: { message: Message }) {
               {isPending ? '···' : fmt(m.created_at)}
             </p>
           </div>
-          <p className="text-sm text-amber-900 whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
+          {m.attachment_url ? <AttachmentBlock message={m} /> : (
+            <p className="text-sm text-amber-900 whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
+          )}
         </div>
       </div>
     )
@@ -433,7 +503,9 @@ function Bubble({ message: m }: { message: Message }) {
       <div className={`max-w-[72%] rounded-2xl px-4 py-3 ${
         isAdmin ? 'bg-brand-500 text-white' : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
       }`}>
-        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
+        {m.attachment_url ? <AttachmentBlock message={m} /> : (
+          <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
+        )}
         <p className={`text-[11px] mt-2 text-right ${isAdmin ? 'text-brand-100' : 'text-zinc-400'}`}>
           {isPending ? '···' : fmt(m.created_at)}
         </p>

@@ -28,3 +28,6 @@ class MessageResponse(BaseModel):
     is_read: bool
     is_internal: bool
     created_at: datetime
+    attachment_url: str | None = None
+    attachment_name: str | None = None
+    attachment_mime: str | None = None

@@ -4,7 +4,7 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Index, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +48,10 @@ class Message(UUIDMixin, TimestampMixin, Base):
 
     # Internal notes are only visible to admins — never broadcast to visitor WS connections.
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+
+    attachment_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attachment_mime: Mapped[str | None] = mapped_column(String(127), nullable=True)
 
     conversation: Mapped[Conversation] = relationship(
         "Conversation", back_populates="messages"

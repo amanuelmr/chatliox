@@ -22,6 +22,9 @@ export interface Message {
   is_read: boolean
   is_internal: boolean
   created_at: string
+  attachment_url: string | null
+  attachment_name: string | null
+  attachment_mime: string | null
 }
 
 // WebSocket event discriminated union — every frame has a `type` field

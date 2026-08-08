@@ -11,3 +11,26 @@ export const getVisitorMessages = (conversationId: string, visitorId: string): P
 
 export const sendMessage = (data: CreateMessageRequest): Promise<Message> =>
   client.post<Message>('/messages', data).then((r) => r.data)
+
+export interface UploadAttachmentParams {
+  conversation_id: string
+  sender_type: 'admin' | 'visitor'
+  file: File
+  is_internal?: boolean
+}
+
+export const uploadAttachment = ({
+  conversation_id,
+  sender_type,
+  file,
+  is_internal,
+}: UploadAttachmentParams): Promise<Message> => {
+  const form = new FormData()
+  form.append('conversation_id', conversation_id)
+  form.append('sender_type', sender_type)
+  if (is_internal) form.append('is_internal', 'true')
+  form.append('file', file)
+  return client
+    .post<Message>('/messages/attachments', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+    .then((r) => r.data)
+}

@@ -4,6 +4,7 @@ from typing import Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -11,6 +12,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.routers import auth, conversations, health, messages, organizations
 from app.services.alerts import unanswered_alert_loop
+from app.services.storage import MEDIA_ROOT
 from app.websockets import router as ws_router
 
 
@@ -69,3 +71,6 @@ app.include_router(conversations.router)
 app.include_router(messages.router)
 app.include_router(ws_router.router)
 app.include_router(organizations.router)
+
+# ── Attachment storage ──────────────────────────────────────────────────────────
+app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
