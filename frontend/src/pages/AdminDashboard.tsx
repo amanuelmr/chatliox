@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import Spinner from '@/components/Spinner'
+import { getAnalyticsSummary } from '@/api/analytics'
 import { createCannedResponse, deleteCannedResponse, getCannedResponses } from '@/api/cannedResponses'
 import {
   getMembers,
@@ -17,7 +18,7 @@ import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
 import type { Member, User, UserRole } from '@/types/auth'
 
-type View = 'inbox' | 'settings'
+type View = 'inbox' | 'analytics' | 'settings'
 
 export default function AdminDashboard() {
   const { id } = useParams<{ id?: string }>()
@@ -66,6 +67,12 @@ export default function AdminDashboard() {
             </svg>
           </NavBtn>
 
+          <NavBtn title="Analytics" active={view === 'analytics'} onClick={() => setView('analytics')}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+            </svg>
+          </NavBtn>
+
           {isAdmin && (
             <NavBtn title="Settings" active={view === 'settings'} onClick={() => setView('settings')}>
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -85,6 +92,8 @@ export default function AdminDashboard() {
           token={token}
           setAuth={setAuth}
         />
+      ) : view === 'analytics' ? (
+        <AnalyticsView />
       ) : (
         <>
           {/* ── Inbox column ─────────────────────────────────────────────────── */}
@@ -184,6 +193,106 @@ function UserMenu({ user, initials, onSignOut }: { user: User | null; initials: 
 }
 
 // ─── Settings view ────────────────────────────────────────────────────────────
+
+function AnalyticsView() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['analytics-summary'],
+    queryFn: getAnalyticsSummary,
+    refetchInterval: 60_000,
+  })
+
+  if (isLoading || !data) {
+    return (
+      <main className="flex-1 bg-zinc-100 flex items-center justify-center">
+        <div className="w-5 h-5 rounded-full border-2 border-zinc-200 border-t-zinc-500 animate-spin" />
+      </main>
+    )
+  }
+
+  const maxDaily = Math.max(1, ...data.volume_by_day.map((d) => d.count))
+
+  return (
+    <main className="flex-1 bg-zinc-100 overflow-auto">
+      <div className="max-w-3xl mx-auto py-10 px-6 flex flex-col gap-6">
+        <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Analytics</h2>
+
+        {/* Stat tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <StatTile label="Total" value={data.total_conversations} />
+          <StatTile label="Waiting" value={data.waiting_count} accent="amber" />
+          <StatTile label="Open" value={data.open_count} accent="brand" />
+          <StatTile label="Closed" value={data.closed_count} accent="emerald" />
+          <StatTile
+            label="Avg first reply"
+            value={data.avg_first_response_minutes === null ? '—' : `${Math.round(data.avg_first_response_minutes)}m`}
+          />
+        </div>
+
+        {/* Volume by day */}
+        <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6">
+          <p className="text-sm font-semibold text-zinc-900 mb-4">Conversations, last 7 days</p>
+          {data.volume_by_day.length === 0 ? (
+            <p className="text-xs text-zinc-400 text-center py-8">No conversations in this period.</p>
+          ) : (
+            <div className="flex items-end gap-3 h-32">
+              {data.volume_by_day.map((d) => (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div className="w-full flex-1 flex items-end">
+                    <div
+                      className="w-full bg-brand-500 rounded-t-md transition-all duration-300"
+                      style={{ height: `${(d.count / maxDaily) * 100}%`, minHeight: d.count > 0 ? '4px' : 0 }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                  <span className="text-[10px] font-semibold text-zinc-600">{d.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Per agent */}
+        <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-100">
+            <p className="text-sm font-semibold text-zinc-900">Resolved by agent</p>
+          </div>
+          {data.per_agent.length === 0 ? (
+            <p className="text-xs text-zinc-400 text-center py-8">No resolved conversations yet.</p>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {data.per_agent.map((a) => (
+                <li key={a.agent_name} className="flex items-center justify-between px-6 py-3">
+                  <span className="text-sm text-zinc-700">{a.agent_name}</span>
+                  <span className="text-sm font-semibold text-zinc-900 tabular-nums">{a.resolved_count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function StatTile({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: number | string
+  accent?: 'amber' | 'brand' | 'emerald'
+}) {
+  const accentClass = accent === 'amber' ? 'text-amber-600' : accent === 'brand' ? 'text-brand-600' : accent === 'emerald' ? 'text-emerald-600' : 'text-zinc-900'
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm px-4 py-3.5">
+      <p className="text-[11px] font-medium text-zinc-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-semibold mt-1 tabular-nums ${accentClass}`}>{value}</p>
+    </div>
+  )
+}
 
 function SettingsView({
   user,
