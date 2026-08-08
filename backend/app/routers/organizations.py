@@ -10,7 +10,8 @@ from app.core.deps import get_current_user, require_admin
 from app.core.email import send_invite_email
 from app.models.user import User, UserRole
 from app.schemas.user import MemberResponse, OrganizationInfo
-from app.services.organization import rotate_invite_token
+from app.schemas.widget import UpdateWidgetConfigRequest, WidgetConfigResponse
+from app.services.organization import get_organization_by_widget_key, rotate_invite_token, update_widget_config
 from app.services.user import get_members_by_org
 
 logger = logging.getLogger(__name__)
@@ -132,3 +133,26 @@ async def send_invite(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to send invite email. Check your SMTP settings.",
         ) from exc
+
+
+@router.patch("/widget", response_model=OrganizationInfo)
+async def update_widget(
+    body: UpdateWidgetConfigRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_widget_config(db, current_user.organization_id, body.widget_color, body.widget_greeting)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+@router.get("/widget/{widget_key}", response_model=WidgetConfigResponse)
+async def get_widget_config(
+    widget_key: str,
+    db: AsyncSession = Depends(get_db),
+) -> WidgetConfigResponse:
+    org = await get_organization_by_widget_key(db, widget_key)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid widget key")
+    return org

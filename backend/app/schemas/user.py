@@ -12,6 +12,8 @@ class OrganizationInfo(BaseModel):
     name: str
     widget_key: str
     invite_token: str
+    widget_color: str
+    widget_greeting: str
 
 
 class UserResponse(BaseModel):

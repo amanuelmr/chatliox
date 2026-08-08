@@ -49,3 +49,22 @@ async def rotate_invite_token(db: AsyncSession, org_id: uuid.UUID) -> Organizati
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def update_widget_config(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    widget_color: str | None,
+    widget_greeting: str | None,
+) -> Organization | None:
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        return None
+    if widget_color is not None:
+        org.widget_color = widget_color
+    if widget_greeting is not None:
+        org.widget_greeting = widget_greeting
+    await db.commit()
+    await db.refresh(org)
+    return org

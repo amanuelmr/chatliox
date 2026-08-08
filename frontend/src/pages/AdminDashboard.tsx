@@ -5,7 +5,14 @@ import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import Spinner from '@/components/Spinner'
 import { createCannedResponse, deleteCannedResponse, getCannedResponses } from '@/api/cannedResponses'
-import { getMembers, removeMember, rotateInviteToken, sendInviteEmail, updateMemberRole } from '@/api/organizations'
+import {
+  getMembers,
+  removeMember,
+  rotateInviteToken,
+  sendInviteEmail,
+  updateMemberRole,
+  updateWidgetConfig,
+} from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
 import type { Member, User, UserRole } from '@/types/auth'
@@ -314,6 +321,9 @@ function SettingsView({
           </button>
         </div>
 
+        {/* Widget appearance */}
+        <WidgetAppearanceCard user={user} token={token} setAuth={setAuth} />
+
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
 
@@ -321,6 +331,72 @@ function SettingsView({
         <CannedResponsesCard />
       </div>
     </main>
+  )
+}
+
+function WidgetAppearanceCard({
+  user,
+  token,
+  setAuth,
+}: {
+  user: User | null
+  token: string | null
+  setAuth: (token: string, user: User) => void
+}) {
+  const [color, setColor] = useState(user?.organization?.widget_color ?? '#4f6ef7')
+  const [greeting, setGreeting] = useState(user?.organization?.widget_greeting ?? '')
+  const [saved, setSaved] = useState(false)
+
+  const { mutate: save, isPending: saving } = useMutation({
+    mutationFn: () => updateWidgetConfig({ widget_color: color, widget_greeting: greeting.trim() }),
+    onSuccess: (org) => {
+      if (token && user) setAuth(token, { ...user, organization: org })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2_000)
+    },
+  })
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
+      <div>
+        <p className="text-sm font-semibold text-zinc-900">Widget appearance</p>
+        <p className="text-xs text-zinc-500 mt-0.5">Customize the brand color and greeting visitors see.</p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="w-10 h-10 rounded-lg border border-zinc-200 cursor-pointer"
+        />
+        <input
+          type="text"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-mono outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
+        />
+      </div>
+
+      <textarea
+        value={greeting}
+        onChange={(e) => setGreeting(e.target.value)}
+        rows={2}
+        maxLength={280}
+        placeholder="Send us a message and we'll get back to you shortly."
+        className="rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-none"
+      />
+
+      <button
+        onClick={() => save()}
+        disabled={saving || !greeting.trim() || !/^#[0-9a-fA-F]{6}$/.test(color)}
+        className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
+          saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
+        }`}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
+      </button>
+    </div>
   )
 }
 

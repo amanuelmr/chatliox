@@ -11,9 +11,13 @@ import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { createConversation, getVisitorConversationStatus } from '@/api/conversations'
 import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/messages'
+import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
+
+const DEFAULT_BRAND_COLOR = '#4f6ef7'
+const DEFAULT_GREETING = "Send us a message and we'll get back to you shortly."
 
 function widgetErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -58,6 +62,14 @@ export default function WidgetPage() {
   const [adminName, setAdminName] = useState<string | null>(null)
   const [convStatus, setConvStatus] = useState<ConversationStatus | null>(null)
 
+  const { data: widgetConfig } = useQuery({
+    queryKey: ['widget-config', widgetKey],
+    queryFn: () => getWidgetConfig(widgetKey),
+    staleTime: Infinity,
+  })
+  const brandColor = widgetConfig?.widget_color ?? DEFAULT_BRAND_COLOR
+  const greeting = widgetConfig?.widget_greeting ?? DEFAULT_GREETING
+
   useEffect(() => {
     document.documentElement.style.background = 'transparent'
     document.body.style.background = 'transparent'
@@ -88,14 +100,16 @@ export default function WidgetPage() {
         }`}
         aria-hidden={!isOpen}
       >
-        <PanelHeader onClose={() => setIsOpen(false)} adminName={adminName} />
+        <PanelHeader onClose={() => setIsOpen(false)} adminName={adminName} brandColor={brandColor} />
         {conversationId ? (
-          <ChatView conversationId={conversationId} visitorId={visitorId} onAdminName={setAdminName} convStatus={convStatus} onStatusChange={setConvStatus} />
+          <ChatView conversationId={conversationId} visitorId={visitorId} onAdminName={setAdminName} convStatus={convStatus} onStatusChange={setConvStatus} brandColor={brandColor} />
         ) : (
           <WelcomeView
             visitorId={visitorId}
             widgetKey={widgetKey}
             onConversationCreated={handleConversationCreated}
+            brandColor={brandColor}
+            greeting={greeting}
           />
         )}
       </div>
@@ -103,7 +117,8 @@ export default function WidgetPage() {
       {/* ── Launcher button ─────────────────────────────────────────────────── */}
       <button
         onClick={() => setIsOpen((v) => !v)}
-        className="pointer-events-auto w-14 h-14 bg-brand-500 hover:bg-brand-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 flex-shrink-0"
+        style={{ backgroundColor: brandColor }}
+        className="pointer-events-auto w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 flex-shrink-0"
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
       >
         <span className={`absolute transition-all duration-200 ${isOpen ? 'opacity-100 rotate-0' : 'opacity-0 rotate-90'}`}>
@@ -123,9 +138,17 @@ export default function WidgetPage() {
 
 // ─── Panel header ─────────────────────────────────────────────────────────────
 
-function PanelHeader({ onClose, adminName }: { onClose: () => void; adminName: string | null }) {
+function PanelHeader({
+  onClose,
+  adminName,
+  brandColor,
+}: {
+  onClose: () => void
+  adminName: string | null
+  brandColor: string
+}) {
   return (
-    <div className="bg-brand-500 px-5 py-4 flex items-center justify-between flex-shrink-0">
+    <div style={{ backgroundColor: brandColor }} className="px-5 py-4 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -158,9 +181,11 @@ interface WelcomeViewProps {
   visitorId: string
   widgetKey: string
   onConversationCreated: (id: string) => void
+  brandColor: string
+  greeting: string
 }
 
-function WelcomeView({ visitorId, widgetKey, onConversationCreated }: WelcomeViewProps) {
+function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, greeting }: WelcomeViewProps) {
   const [name, setName] = useState('')
   const [firstMessage, setFirstMessage] = useState('')
 
@@ -185,10 +210,8 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated }: WelcomeVie
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="bg-brand-500 px-5 pb-5">
-        <p className="text-white/60 text-xs leading-relaxed">
-          Send us a message and we'll get back to you shortly.
-        </p>
+      <div style={{ backgroundColor: brandColor }} className="px-5 pb-5">
+        <p className="text-white/60 text-xs leading-relaxed">{greeting}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
@@ -214,7 +237,8 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated }: WelcomeVie
         <button
           onClick={() => startChat()}
           disabled={!firstMessage.trim() || isPending}
-          className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
+          style={{ backgroundColor: brandColor }}
+          className="w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
         >
           {isPending ? (
             <span className="flex items-center justify-center gap-2">
@@ -236,9 +260,10 @@ interface ChatViewProps {
   onAdminName: (name: string | null) => void
   convStatus: ConversationStatus | null
   onStatusChange: (s: ConversationStatus) => void
+  brandColor: string
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -423,7 +448,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           <p className="text-center text-xs text-zinc-400 py-6">No messages yet.</p>
         )}
         {messages.filter((msg) => !msg.is_internal).map((msg) => (
-          <WidgetBubble key={msg.id} message={msg} />
+          <WidgetBubble key={msg.id} message={msg} brandColor={brandColor} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -508,7 +533,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           type="submit"
           disabled={isPending || !content.trim()}
           aria-label={isPending ? 'Sending' : 'Send message'}
-          className="bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-xl px-3 py-2.5 transition-all duration-200 flex-shrink-0 flex items-center justify-center w-10"
+          style={{ backgroundColor: brandColor }}
+          className="disabled:opacity-40 text-white rounded-xl px-3 py-2.5 transition-all duration-200 flex-shrink-0 flex items-center justify-center w-10"
         >
           {isPending ? (
             <Spinner size="xs" variant="white" />
@@ -567,17 +593,18 @@ function WidgetAttachment({ message }: { message: Message }) {
   )
 }
 
-function WidgetBubble({ message }: { message: Message }) {
+function WidgetBubble({ message, brandColor }: { message: Message; brandColor: string }) {
   const isVisitor = message.sender_type === 'visitor'
   const isPending = message.id.startsWith('opt-')
 
   return (
     <div className={`flex transition-opacity duration-150 ${isVisitor ? 'justify-end' : 'justify-start'} ${isPending ? 'opacity-60' : 'opacity-100'}`}>
-      <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm ${
-        isVisitor
-          ? 'bg-brand-500 text-white'
-          : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
-      }`}>
+      <div
+        style={isVisitor ? { backgroundColor: brandColor } : undefined}
+        className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm ${
+          isVisitor ? 'text-white' : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
+        }`}
+      >
         {message.attachment_url ? <WidgetAttachment message={message} /> : (
           <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
         )}

@@ -21,6 +21,13 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     widget_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     invite_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
 
+    widget_color: Mapped[str] = mapped_column(String(7), nullable=False, server_default="#4f6ef7")
+    widget_greeting: Mapped[str] = mapped_column(
+        String(280),
+        nullable=False,
+        server_default="Send us a message and we'll get back to you shortly.",
+    )
+
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="organization"

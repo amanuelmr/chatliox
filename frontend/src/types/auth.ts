@@ -2,6 +2,8 @@ export interface Organization {
   name: string
   widget_key: string
   invite_token: string
+  widget_color: string
+  widget_greeting: string
 }
 
 export type UserRole = 'admin' | 'agent'
