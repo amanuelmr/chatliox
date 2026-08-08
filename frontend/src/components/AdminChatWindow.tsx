@@ -399,6 +399,13 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
                 }`}>{conv.status}</span>
               ) : '—'
             } />
+            {conv?.csat_rating != null && (
+              <Field label="Satisfaction" value={
+                <span className="text-sm">
+                  {'★'.repeat(conv.csat_rating)}{'☆'.repeat(5 - conv.csat_rating)}
+                </span>
+              } />
+            )}
           </div>
         </div>
 

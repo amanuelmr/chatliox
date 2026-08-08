@@ -19,5 +19,10 @@ export const updateConversationStatus = (id: string, status: ConversationStatus)
 export const updateConversationTags = (id: string, tags: string[]): Promise<Conversation> =>
   client.patch<Conversation>(`/conversations/${id}/tags`, { tags }).then((r) => r.data)
 
+export const submitCsat = (conversationId: string, visitorId: string, rating: number): Promise<Conversation> =>
+  client
+    .post<Conversation>(`/conversations/${conversationId}/csat`, { visitor_id: visitorId, rating })
+    .then((r) => r.data)
+
 export const getVisitorConversationStatus = (conversationId: string, visitorId: string): Promise<{ status: ConversationStatus }> =>
   client.get(`/conversations/${conversationId}/visitor-status`, { params: { visitor_id: visitorId } }).then((r) => r.data)

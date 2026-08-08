@@ -40,6 +40,13 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
     ]
     avg_first_response_minutes = sum(diffs_minutes) / len(diffs_minutes) if diffs_minutes else None
 
+    csat_rows = await db.execute(
+        select(Conversation.csat_rating)
+        .where(Conversation.organization_id == organization_id, Conversation.csat_rating.is_not(None))
+    )
+    csat_ratings = [r[0] for r in csat_rows.all()]
+    avg_csat = sum(csat_ratings) / len(csat_ratings) if csat_ratings else None
+
     since = datetime.now(timezone.utc) - timedelta(days=7)
     day_expr = func.date_trunc("day", Conversation.created_at)
     volume_rows = await db.execute(
@@ -70,6 +77,8 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
         "open_count": status_counts.get("open", 0),
         "closed_count": status_counts.get("closed", 0),
         "avg_first_response_minutes": avg_first_response_minutes,
+        "avg_csat": avg_csat,
+        "csat_response_count": len(csat_ratings),
         "volume_by_day": volume_by_day,
         "per_agent": per_agent,
     }

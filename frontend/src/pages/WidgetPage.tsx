@@ -9,7 +9,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
-import { createConversation, getVisitorConversationStatus } from '@/api/conversations'
+import { createConversation, getVisitorConversationStatus, submitCsat } from '@/api/conversations'
 import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
@@ -485,6 +485,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
         </div>
       </div>
 
+      {convStatus === 'closed' && <CsatPrompt conversationId={conversationId} visitorId={visitorId} />}
+
       {sendError && (
         <div className="px-4 pb-1 bg-white">
           <p className="text-xs text-red-500">{widgetErrorMessage(sendError)}</p>
@@ -546,6 +548,47 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
         </button>
       </form>
     </>
+  )
+}
+
+// ─── CSAT prompt ──────────────────────────────────────────────────────────────
+
+function CsatPrompt({ conversationId, visitorId }: { conversationId: string; visitorId: string }) {
+  const storageKey = `chatliox_csat_${conversationId}`
+  const [given, setGiven] = useState(() => localStorage.getItem(storageKey) !== null)
+
+  const { mutate: rate, isPending } = useMutation({
+    mutationFn: (rating: number) => submitCsat(conversationId, visitorId, rating),
+    onSuccess: (_conv, rating) => {
+      localStorage.setItem(storageKey, String(rating))
+      setGiven(true)
+    },
+  })
+
+  if (given) {
+    return (
+      <p className="mx-3 mb-2 text-center text-xs text-zinc-400">Thanks for your feedback!</p>
+    )
+  }
+
+  return (
+    <div className="mx-3 mb-2 bg-white border border-zinc-200 rounded-xl px-3.5 py-2.5">
+      <p className="text-xs text-zinc-500 mb-1.5">How was this conversation?</p>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            disabled={isPending}
+            onClick={() => rate(n)}
+            aria-label={`Rate ${n} out of 5 stars`}
+            className="text-lg text-amber-400 hover:scale-110 transition-transform duration-150 disabled:opacity-40"
+          >
+            ★
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

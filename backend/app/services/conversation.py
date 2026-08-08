@@ -125,6 +125,21 @@ async def update_conversation_tags(
     return conv
 
 
+async def submit_csat(
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    visitor_id: str,
+    rating: int,
+) -> Conversation | None:
+    conv = await db.get(Conversation, conversation_id)
+    if conv is None or str(conv.visitor_id) != visitor_id:
+        return None
+    conv.csat_rating = rating
+    await db.commit()
+    await db.refresh(conv)
+    return conv
+
+
 async def mark_visitor_messages_read(db: AsyncSession, conversation_id: uuid.UUID) -> None:
     await db.execute(
         update(Message)

@@ -11,6 +11,7 @@ export interface Conversation {
   created_at: string
   assigned_to_name: string | null
   tags: string[]
+  csat_rating: number | null
 }
 
 export interface Message {

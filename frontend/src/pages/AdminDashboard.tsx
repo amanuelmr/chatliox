@@ -217,7 +217,7 @@ function AnalyticsView() {
         <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Analytics</h2>
 
         {/* Stat tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatTile label="Total" value={data.total_conversations} />
           <StatTile label="Waiting" value={data.waiting_count} accent="amber" />
           <StatTile label="Open" value={data.open_count} accent="brand" />
@@ -225,6 +225,10 @@ function AnalyticsView() {
           <StatTile
             label="Avg first reply"
             value={data.avg_first_response_minutes === null ? '—' : `${Math.round(data.avg_first_response_minutes)}m`}
+          />
+          <StatTile
+            label="Avg CSAT"
+            value={data.avg_csat === null ? '—' : `${data.avg_csat.toFixed(1)} / 5`}
           />
         </div>
 

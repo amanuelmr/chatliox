@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.conversation import ConversationStatus
 
@@ -21,6 +21,11 @@ class UpdateConversationTagsRequest(BaseModel):
     tags: list[str]
 
 
+class SubmitCsatRequest(BaseModel):
+    visitor_id: str
+    rating: int = Field(ge=1, le=5)
+
+
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -33,3 +38,4 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     assigned_to_name: str | None = None
     tags: list[str] = []
+    csat_rating: int | None = None

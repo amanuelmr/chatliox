@@ -17,5 +17,7 @@ class AnalyticsSummaryResponse(BaseModel):
     open_count: int
     closed_count: int
     avg_first_response_minutes: float | None
+    avg_csat: float | None
+    csat_response_count: int
     volume_by_day: list[DailyVolume]
     per_agent: list[AgentStat]

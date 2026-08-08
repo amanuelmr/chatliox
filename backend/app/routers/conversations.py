@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.conversation import (
     ConversationResponse,
     CreateConversationRequest,
+    SubmitCsatRequest,
     UpdateConversationStatusRequest,
     UpdateConversationTagsRequest,
 )
@@ -21,6 +22,7 @@ from app.services.conversation import (
     get_conversation,
     get_conversations,
     mark_visitor_messages_read,
+    submit_csat,
     update_conversation_status,
     update_conversation_tags,
 )
@@ -116,6 +118,24 @@ async def update_tags(
     if not conv or conv.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     updated = await update_conversation_tags(db, conversation_id, body.tags)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    await ws_manager.broadcast(
+        org_room(updated.organization_id),
+        {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},
+    )
+    return updated
+
+
+@router.post("/{conversation_id}/csat", response_model=ConversationResponse)
+@limiter.limit("5/minute")
+async def submit_conversation_csat(
+    request: Request,
+    conversation_id: uuid.UUID,
+    body: SubmitCsatRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ConversationResponse:
+    updated = await submit_csat(db, conversation_id, body.visitor_id, body.rating)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     await ws_manager.broadcast(
