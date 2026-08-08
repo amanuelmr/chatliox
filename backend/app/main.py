@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from typing import Callable
 
 from fastapi import FastAPI, Request, Response
@@ -8,13 +10,25 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.routers import auth, conversations, health, messages, organizations
+from app.services.alerts import unanswered_alert_loop
 from app.websockets import router as ws_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(unanswered_alert_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
 
 app = FastAPI(
     title="Chatliox API",
     version="0.1.0",
     docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────

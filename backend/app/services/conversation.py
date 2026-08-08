@@ -1,12 +1,13 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.message import Message, SenderType
+from app.models.organization import Organization
 
 
 async def create_conversation(
@@ -92,3 +93,27 @@ async def mark_visitor_messages_read(db: AsyncSession, conversation_id: uuid.UUI
         .values(is_read=True)
     )
     await db.commit()
+
+
+async def get_stale_waiting_conversations(
+    db: AsyncSession, older_than_minutes: int
+) -> list[Conversation]:
+    """Conversations sitting in WAITING past the threshold that haven't
+    already triggered an unanswered-alert email."""
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+    q = (
+        select(Conversation)
+        .where(Conversation.status == ConversationStatus.WAITING)
+        .where(Conversation.waiting_alert_sent_at.is_(None))
+        .where(func.coalesce(Conversation.last_message_at, Conversation.created_at) < threshold)
+        .options(selectinload(Conversation.organization).selectinload(Organization.users))
+    )
+    result = await db.execute(q)
+    return list(result.scalars().all())
+
+
+async def mark_waiting_alert_sent(db: AsyncSession, conversation_id: uuid.UUID) -> None:
+    conv = await db.get(Conversation, conversation_id)
+    if conv is not None:
+        conv.waiting_alert_sent_at = datetime.now(timezone.utc)
+        await db.commit()

@@ -43,6 +43,9 @@ async def create_message(
             # Visitor reply to a resolved conversation reopens it
             if conversation.status == ConversationStatus.CLOSED:
                 conversation.status = ConversationStatus.WAITING
+            # New visitor activity restarts the "gone quiet" clock so a later
+            # silence on this conversation can trigger another alert.
+            conversation.waiting_alert_sent_at = None
 
     db.add(message)
     await db.commit()

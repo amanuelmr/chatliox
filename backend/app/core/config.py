@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_TLS: bool = True
 
+    # How long a conversation can sit unanswered before the team gets an
+    # email nudge, and how often the sweep checks for that.
+    UNANSWERED_ALERT_MINUTES: int = 5
+    UNANSWERED_ALERT_POLL_SECONDS: int = 60
+
     @property
     def origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]

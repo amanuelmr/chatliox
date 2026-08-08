@@ -115,6 +115,8 @@ Set these in `backend/.env`:
 | `SMTP_USER` | SMTP account username |
 | `SMTP_PASSWORD` | SMTP account password or app password |
 | `SMTP_FROM` | Email address used as the sender |
+| `UNANSWERED_ALERT_MINUTES` | Minutes a conversation can sit unanswered before the team gets an email alert |
+| `UNANSWERED_ALERT_POLL_SECONDS` | How often the backend checks for unanswered conversations |
 
 ### Frontend
 

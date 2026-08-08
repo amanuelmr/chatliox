@@ -44,6 +44,12 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Set once an "unanswered too long" email alert has fired, so the sweep
+    # doesn't re-notify the team every poll cycle for the same silence.
+    waiting_alert_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
