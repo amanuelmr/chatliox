@@ -8,9 +8,11 @@ from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import ConversationStatus
 from app.models.message import SenderType
 from app.models.user import User
+from app.schemas.conversation import ConversationResponse
 from app.schemas.message import CreateMessageRequest, MessageResponse
-from app.services.conversation import get_conversation
+from app.services.conversation import get_conversation, get_conversation_with_assignee
 from app.services.message import create_message
+from app.websockets.router import org_room
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -66,6 +68,16 @@ async def create(
             await ws_manager.broadcast(
                 str(body.conversation_id),
                 {"type": "status", "status": "waiting"},
+            )
+
+        conv_for_broadcast = await get_conversation_with_assignee(db, body.conversation_id)
+        if conv_for_broadcast is not None:
+            await ws_manager.broadcast(
+                org_room(conv_for_broadcast.organization_id),
+                {
+                    "type": "conversation_updated",
+                    **ConversationResponse.model_validate(conv_for_broadcast).model_dump(mode="json"),
+                },
             )
 
     return message

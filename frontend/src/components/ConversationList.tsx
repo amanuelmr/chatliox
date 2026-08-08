@@ -50,7 +50,9 @@ export default function ConversationList({ activeId, onSelect }: Props) {
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['conversations'],
     queryFn: () => getConversations(),
-    refetchInterval: 10_000,
+    // The dashboard WebSocket (useDashboardSocket) keeps this live; this is
+    // just a safety net in case that connection drops silently.
+    refetchInterval: 60_000,
   })
 
   const filtered = filter === 'all'

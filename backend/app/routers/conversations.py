@@ -20,6 +20,7 @@ from app.services.conversation import (
 )
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_widget_key
+from app.websockets.router import org_room
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -35,13 +36,18 @@ async def create(
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid widget key")
 
-    return await create_conversation(
+    conversation = await create_conversation(
         db,
         body.visitor_id,
         body.visitor_name,
         body.visitor_email,
         org.id,
     )
+    await ws_manager.broadcast(
+        org_room(org.id),
+        {"type": "conversation_created", **ConversationResponse.model_validate(conversation).model_dump(mode="json")},
+    )
+    return conversation
 
 
 @router.get("", response_model=list[ConversationResponse])
@@ -83,6 +89,10 @@ async def update_status(
     await ws_manager.broadcast(
         str(conversation_id),
         {"type": "status", "status": body.status.value},
+    )
+    await ws_manager.broadcast(
+        org_room(updated.organization_id),
+        {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},
     )
     return updated
 

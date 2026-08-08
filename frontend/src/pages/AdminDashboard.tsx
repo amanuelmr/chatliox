@@ -5,6 +5,7 @@ import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import Spinner from '@/components/Spinner'
 import { getMembers, removeMember, rotateInviteToken, sendInviteEmail, updateMemberRole } from '@/api/organizations'
+import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
 import type { Member, User, UserRole } from '@/types/auth'
 
@@ -20,6 +21,8 @@ export default function AdminDashboard() {
   const [copied, setCopied] = useState(false)
   const [view, setView] = useState<View>('inbox')
   const isAdmin = user?.role === 'admin'
+
+  useDashboardSocket(token)
 
   const embedCode = user?.organization
     ? `<iframe src="${window.location.origin}/widget?key=${user.organization.widget_key}" style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:none;z-index:2147483647;background:transparent;" allowtransparency="true" title="Chat Support"></iframe>`

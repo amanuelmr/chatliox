@@ -15,6 +15,54 @@ router = APIRouter()
 _POLICY_VIOLATION = 1008  # RFC 6455 — used to signal auth/authz failures
 
 
+def org_room(organization_id: _uuid.UUID | str) -> str:
+    return f"org:{organization_id}"
+
+
+@router.websocket("/ws/dashboard")
+async def dashboard_ws(
+    websocket: WebSocket,
+    token: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Org-wide channel — pushes conversation_created/conversation_updated so the
+    dashboard list stays live without polling."""
+    await websocket.accept()
+
+    if token is None:
+        await websocket.close(code=_POLICY_VIOLATION)
+        return
+
+    sub = decode_access_token(token)
+    if sub is None:
+        await websocket.close(code=_POLICY_VIOLATION)
+        return
+
+    try:
+        user_uuid = _uuid.UUID(sub)
+    except ValueError:
+        await websocket.close(code=_POLICY_VIOLATION)
+        return
+
+    user = await get_user_by_id(db, user_uuid)
+    if user is None or not user.is_active:
+        await websocket.close(code=_POLICY_VIOLATION)
+        return
+
+    room = org_room(user.organization_id)
+    manager.add_connection(room, websocket)
+
+    try:
+        while True:
+            # No client-originated events on this channel — just keep the
+            # connection open and detect disconnects.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(room, websocket)
+
+
 @router.websocket("/ws/conversations/{conversation_id}")
 async def conversation_ws(
     websocket: WebSocket,

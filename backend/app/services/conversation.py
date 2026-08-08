@@ -53,6 +53,17 @@ async def get_conversation(db: AsyncSession, conversation_id: uuid.UUID) -> Conv
     return await db.get(Conversation, conversation_id)
 
 
+async def get_conversation_with_assignee(
+    db: AsyncSession, conversation_id: uuid.UUID
+) -> Conversation | None:
+    result = await db.execute(
+        select(Conversation)
+        .where(Conversation.id == conversation_id)
+        .options(selectinload(Conversation.assigned_to))
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_conversation_status(
     db: AsyncSession,
     conversation_id: uuid.UUID,
