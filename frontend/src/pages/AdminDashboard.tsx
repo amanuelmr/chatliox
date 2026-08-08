@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import Spinner from '@/components/Spinner'
+import { createCannedResponse, deleteCannedResponse, getCannedResponses } from '@/api/cannedResponses'
 import { getMembers, removeMember, rotateInviteToken, sendInviteEmail, updateMemberRole } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
@@ -315,8 +316,97 @@ function SettingsView({
 
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
+
+        {/* Canned responses */}
+        <CannedResponsesCard />
       </div>
     </main>
+  )
+}
+
+function CannedResponsesCard() {
+  const queryClient = useQueryClient()
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+
+  const { data: responses = [], isLoading } = useQuery({
+    queryKey: ['canned-responses'],
+    queryFn: getCannedResponses,
+  })
+
+  const { mutate: create, isPending: creating } = useMutation({
+    mutationFn: () => createCannedResponse({ title: title.trim(), content: content.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['canned-responses'] })
+      setTitle('')
+      setContent('')
+    },
+  })
+
+  const { mutate: remove } = useMutation({
+    mutationFn: (id: string) => deleteCannedResponse(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['canned-responses'] }),
+  })
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-zinc-100">
+        <p className="text-sm font-semibold text-zinc-900">Saved replies</p>
+        <p className="text-xs text-zinc-500 mt-0.5">Insert these into the reply box from any conversation.</p>
+      </div>
+
+      <div className="px-6 py-4 flex flex-col gap-2 border-b border-zinc-100">
+        <input
+          type="text"
+          placeholder="Shortcut title (e.g. Refund policy)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
+        />
+        <textarea
+          placeholder="Reply text"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          rows={2}
+          className="rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-none"
+        />
+        <button
+          onClick={() => create()}
+          disabled={!title.trim() || !content.trim() || creating}
+          className="self-start text-sm font-medium bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white px-4 py-2 rounded-lg transition-all duration-200"
+        >
+          {creating ? 'Adding…' : 'Add saved reply'}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="px-6 py-6 flex justify-center">
+          <div className="w-4 h-4 rounded-full border-2 border-zinc-200 border-t-zinc-500 animate-spin" />
+        </div>
+      ) : responses.length === 0 ? (
+        <p className="text-xs text-zinc-400 text-center py-6">No saved replies yet.</p>
+      ) : (
+        <ul className="divide-y divide-zinc-100">
+          {responses.map((r) => (
+            <li key={r.id} className="flex items-start gap-3 px-6 py-3.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-zinc-900 truncate">{r.title}</p>
+                <p className="text-xs text-zinc-400 mt-0.5 whitespace-pre-wrap break-words">{r.content}</p>
+              </div>
+              <button
+                onClick={() => remove(r.id)}
+                title="Delete"
+                className="flex-shrink-0 p-1.5 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-all duration-150"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

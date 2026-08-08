@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getCannedResponses } from '@/api/cannedResponses'
 import { getConversations, updateConversationStatus } from '@/api/conversations'
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
@@ -190,6 +191,10 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     upload({ conversation_id: conversationId, sender_type: 'admin', file, is_internal: mode === 'note' })
   }
 
+  const insertCannedResponse = (text: string) => {
+    setContent((prev) => (prev.trim() ? `${prev}\n${text}` : text))
+  }
+
   return (
     // Outer container sits on the zinc-100 canvas from AdminDashboard
     <div className="h-full flex gap-4 p-4">
@@ -311,6 +316,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
                   </svg>
                 )}
               </button>
+              <CannedResponsePicker disabled={resolved} onPick={insertCannedResponse} />
               <textarea
                 value={content}
                 onChange={onChange}
@@ -396,6 +402,66 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
           </div>
         </div>
       </aside>
+    </div>
+  )
+}
+
+function CannedResponsePicker({ disabled, onPick }: { disabled: boolean; onPick: (content: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const { data: responses = [] } = useQuery({
+    queryKey: ['canned-responses'],
+    queryFn: getCannedResponses,
+    enabled: open,
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        title="Insert saved reply"
+        className="w-10 h-[46px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all duration-150 disabled:opacity-40"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg ring-1 ring-zinc-200 z-10">
+          {responses.length === 0 ? (
+            <p className="text-xs text-zinc-400 text-center py-6 px-4">
+              No saved replies yet. Add some in Settings.
+            </p>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {responses.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => { onPick(r.content); setOpen(false) }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors"
+                  >
+                    <p className="text-xs font-semibold text-zinc-900">{r.title}</p>
+                    <p className="text-xs text-zinc-400 truncate">{r.content}</p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }
