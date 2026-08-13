@@ -26,3 +26,11 @@ class AcceptInviteRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
