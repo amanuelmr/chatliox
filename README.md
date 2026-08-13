@@ -22,6 +22,12 @@ The project includes:
 - Conversation states such as waiting, open, and closed
 - Internal notes that stay visible only to the team
 - Team invites and role-based access
+- Saved canned responses agents can insert into replies
+- Conversation tags and full-text search across the inbox
+- Customizable widget branding (color and greeting message)
+- An analytics view with volume, first response time, and per-agent stats
+- Visitor CSAT ratings on resolved conversations
+- Email verification for new accounts, sent via Resend
 
 ## What Problem It Solves
 
@@ -110,11 +116,8 @@ Set these in `backend/.env`:
 | `ENVIRONMENT` | `development` or `production` |
 | `ALLOWED_ORIGINS` | Frontend origins allowed to call the API |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Login token lifetime in minutes |
-| `SMTP_HOST` | SMTP server host used for sending invite emails |
-| `SMTP_PORT` | SMTP server port |
-| `SMTP_USER` | SMTP account username |
-| `SMTP_PASSWORD` | SMTP account password or app password |
-| `SMTP_FROM` | Email address used as the sender |
+| `RESEND_API_KEY` | API key for [Resend](https://resend.com), used to send verification, invite, and alert emails |
+| `EMAIL_FROM` | Sender address for outgoing email, e.g. `Chatliox <notifications@yourdomain.com>` — the domain must be verified in Resend |
 | `UNANSWERED_ALERT_MINUTES` | Minutes a conversation can sit unanswered before the team gets an email alert |
 | `UNANSWERED_ALERT_POLL_SECONDS` | How often the backend checks for unanswered conversations |
 
