@@ -34,11 +34,11 @@ def _base_url() -> str:
 
 
 async def _send_verification(db: AsyncSession, user: User) -> None:
-    raw_token = await create_verification_token(db, user.id)
-    if raw_token is None:
-        return
-    verify_url = f"{_base_url()}/verify-email?token={raw_token}"
     try:
+        raw_token = await create_verification_token(db, user.id)
+        if raw_token is None:
+            return
+        verify_url = f"{_base_url()}/verify-email?token={raw_token}"
         await send_verification_email(user.email, user.full_name, verify_url)
     except Exception as exc:
         logger.exception("Failed to send verification email to %s: %s", user.email, exc)
