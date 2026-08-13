@@ -45,7 +45,7 @@ async def dashboard_ws(
         return
 
     user = await get_user_by_id(db, user_uuid)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or not user.is_verified:
         await websocket.close(code=_POLICY_VIOLATION)
         return
 
@@ -112,6 +112,7 @@ async def conversation_ws(
         if (
             user is None
             or not user.is_active
+            or not user.is_verified
             or user.organization_id != conv.organization_id
         ):
             await websocket.close(code=_POLICY_VIOLATION)

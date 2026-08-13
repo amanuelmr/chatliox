@@ -44,8 +44,19 @@ _403 = HTTPException(
     detail="Admin access required",
 )
 
+_403_unverified = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Please verify your email to continue",
+)
 
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+
+async def require_verified_user(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_verified:
+        raise _403_unverified
+    return current_user
+
+
+async def require_admin(current_user: User = Depends(require_verified_user)) -> User:
     if current_user.role != UserRole.ADMIN:
         raise _403
     return current_user

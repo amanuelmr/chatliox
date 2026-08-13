@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_verified_user
 from app.core.limiter import limiter
 from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import ConversationStatus
@@ -64,7 +64,7 @@ async def list_all(
     tag: str | None = None,
     q: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> list[ConversationResponse]:
     return await get_conversations(db, current_user.organization_id, status, tag, q)
 
@@ -73,7 +73,7 @@ async def list_all(
 async def list_messages(
     conversation_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> list[MessageResponse]:
     conv = await get_conversation(db, conversation_id)
     if not conv or conv.organization_id != current_user.organization_id:
@@ -88,7 +88,7 @@ async def update_status(
     conversation_id: uuid.UUID,
     body: UpdateConversationStatusRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> ConversationResponse:
     conv = await get_conversation(db, conversation_id)
     if not conv or conv.organization_id != current_user.organization_id:
@@ -112,7 +112,7 @@ async def update_tags(
     conversation_id: uuid.UUID,
     body: UpdateConversationTagsRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> ConversationResponse:
     conv = await get_conversation(db, conversation_id)
     if not conv or conv.organization_id != current_user.organization_id:

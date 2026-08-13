@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_verified_user
 from app.models.user import User
 from app.schemas.canned_response import (
     CannedResponseResponse,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/canned-responses", tags=["canned-responses"])
 @router.get("", response_model=list[CannedResponseResponse])
 async def list_all(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> list[CannedResponseResponse]:
     return await get_canned_responses(db, current_user.organization_id)
 
@@ -34,7 +34,7 @@ async def list_all(
 async def create(
     body: CreateCannedResponseRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> CannedResponseResponse:
     return await create_canned_response(db, current_user.organization_id, body.title, body.content)
 
@@ -44,7 +44,7 @@ async def update(
     response_id: uuid.UUID,
     body: UpdateCannedResponseRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> CannedResponseResponse:
     response = await get_canned_response(db, response_id)
     if response is None or response.organization_id != current_user.organization_id:
@@ -56,7 +56,7 @@ async def update(
 async def delete(
     response_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ) -> None:
     response = await get_canned_response(db, response_id)
     if response is None or response.organization_id != current_user.organization_id:
