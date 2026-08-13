@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import Spinner from '@/components/Spinner'
-import UnverifiedBanner from '@/components/UnverifiedBanner'
 import { getAnalyticsSummary } from '@/api/analytics'
 import { createCannedResponse, deleteCannedResponse, getCannedResponses } from '@/api/cannedResponses'
 import {
@@ -51,10 +50,8 @@ export default function AdminDashboard() {
     : '?'
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-100">
-      {user && !user.is_verified && <UnverifiedBanner email={user.email} />}
+    <div className="h-screen flex overflow-hidden bg-zinc-100">
 
-      <div className="flex-1 flex overflow-hidden">
       {/* ── Slim nav (56px) ──────────────────────────────────────────────────── */}
       <nav className="w-14 bg-zinc-900 flex flex-col items-center py-4 flex-shrink-0">
         <div className="flex flex-col gap-1 flex-1">
@@ -119,7 +116,6 @@ export default function AdminDashboard() {
           </main>
         </>
       )}
-      </div>
     </div>
   )
 }
