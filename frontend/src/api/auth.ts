@@ -18,3 +18,9 @@ export const acceptInvite = (
   data: { email: string; password: string; full_name: string },
 ): Promise<TokenResponse> =>
   client.post<TokenResponse>(`/auth/invite/${token}`, data).then((r) => r.data)
+
+export const verifyEmail = (token: string): Promise<TokenResponse> =>
+  client.post<TokenResponse>('/auth/verify-email', { token }).then((r) => r.data)
+
+export const resendVerification = (email: string): Promise<void> =>
+  client.post('/auth/resend-verification', { email }).then(() => undefined)

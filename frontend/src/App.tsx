@@ -10,6 +10,7 @@ import GuidePage from '@/pages/GuidePage'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import VerifyEmailPage from '@/pages/VerifyEmailPage'
 import WelcomePage from '@/pages/WelcomePage'
 import WidgetPage from '@/pages/WidgetPage'
 import { useAuthStore } from '@/store/authStore'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/app" element={<AdminDashboard />} />
           <Route path="/app/c/:id" element={<AdminDashboard />} />
