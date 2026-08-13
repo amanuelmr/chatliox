@@ -1,38 +1,23 @@
-import asyncio
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import httpx
 
 from app.core.config import settings
 
-
-def _make_ssl_context() -> ssl.SSLContext:
-    import certifi
-    return ssl.create_default_context(cafile=certifi.where())
+RESEND_API_URL = "https://api.resend.com/emails"
 
 
-def _send_sync(to_email: str, subject: str, html_body: str) -> None:
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
-
-    ctx = _make_ssl_context()
-
-    if settings.SMTP_TLS:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
-            smtp.ehlo()
-            smtp.starttls(context=ctx)
-            smtp.ehlo()
-            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            smtp.sendmail(msg["From"], to_email, msg.as_string())
-    else:
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=ctx) as smtp:
-            smtp.ehlo()
-            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            smtp.sendmail(msg["From"], to_email, msg.as_string())
+async def _send(to_email: str, subject: str, html_body: str) -> None:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(
+            RESEND_API_URL,
+            headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
+            json={
+                "from": settings.EMAIL_FROM,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body,
+            },
+        )
+        response.raise_for_status()
 
 
 async def send_invite_email(to_email: str, org_name: str, invite_url: str) -> None:
@@ -56,8 +41,7 @@ async def send_invite_email(to_email: str, org_name: str, invite_url: str) -> No
       </p>
     </div>
     """
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _send_sync, to_email, subject, html_body)
+    await _send(to_email, subject, html_body)
 
 
 async def send_verification_email(to_email: str, full_name: str, verify_url: str) -> None:
@@ -82,8 +66,7 @@ async def send_verification_email(to_email: str, full_name: str, verify_url: str
       </p>
     </div>
     """
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _send_sync, to_email, subject, html_body)
+    await _send(to_email, subject, html_body)
 
 
 async def send_unanswered_alert_email(
@@ -106,5 +89,4 @@ async def send_unanswered_alert_email(
       </a>
     </div>
     """
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _send_sync, to_email, subject, html_body)
+    await _send(to_email, subject, html_body)

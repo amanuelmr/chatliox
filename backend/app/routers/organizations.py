@@ -131,7 +131,7 @@ async def send_invite(
         logger.exception("Failed to send invite email to %s: %s", body.email, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to send invite email. Check your SMTP settings.",
+            detail="Failed to send invite email. Check your Resend settings.",
         ) from exc
 
 

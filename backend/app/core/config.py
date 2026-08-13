@@ -10,12 +10,8 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5173"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = ""
-    SMTP_TLS: bool = True
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "Chatliox <notifications@notify.amanuel.work>"
 
     # How long a conversation can sit unanswered before the team gets an
     # email nudge, and how often the sweep checks for that.

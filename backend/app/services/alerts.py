@@ -16,7 +16,7 @@ def _visitor_label(conv) -> str:
 
 
 async def run_unanswered_alert_sweep(db: AsyncSession) -> None:
-    if not settings.SMTP_HOST:
+    if not settings.RESEND_API_KEY:
         return
 
     base_url = settings.ALLOWED_ORIGINS.split(",")[0].strip().rstrip("/")
