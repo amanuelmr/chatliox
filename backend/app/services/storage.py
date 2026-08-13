@@ -1,9 +1,16 @@
+import os
 import uuid
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
 
-MEDIA_ROOT = Path(__file__).resolve().parent.parent.parent / "media"
+# Vercel's serverless filesystem is read-only except for /tmp, so local
+# attachment storage has to live there in production.
+MEDIA_ROOT = (
+    Path("/tmp/media")
+    if os.environ.get("VERCEL")
+    else Path(__file__).resolve().parent.parent.parent / "media"
+)
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
