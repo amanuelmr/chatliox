@@ -131,11 +131,28 @@ Set these in `frontend/.env`:
 
 ## Embedding the Widget
 
-After creating an account, copy the widget key from the dashboard and place the widget on a website like this:
+After creating an account, copy the widget key from the dashboard and add one script tag to the target website, right before `</body>`:
+
+```html
+<script
+  src="https://your-frontend-domain.com/widget.js"
+  data-widget-key="YOUR_WIDGET_KEY"
+  async>
+</script>
+```
+
+That's it — no cloning this repo, no iframe sizing to get right by hand. The script injects a launcher bubble and a chat panel that stay out of the way of the rest of the page, shows a badge when a reply arrives while the panel is closed, and cleans up after itself if you remove the tag.
+
+Options:
+
+- `data-position="left"` — anchor the widget to the bottom-left instead of the default bottom-right.
+- `window.chatliox.open()` / `.close()` / `.toggle()` — control the widget programmatically from the host page's own JavaScript.
+
+If you'd rather host the chat panel yourself inside a fixed-size box you control (e.g. inside an existing support page), the old direct iframe embed still works:
 
 ```html
 <iframe
-  src="https://your-domain.com/widget?key=YOUR_WIDGET_KEY"
+  src="https://your-frontend-domain.com/widget?key=YOUR_WIDGET_KEY"
   style="position:fixed;bottom:24px;right:24px;width:380px;height:560px;border:none;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:9999"
   allow="clipboard-write">
 </iframe>

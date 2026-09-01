@@ -48,13 +48,25 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+// Messages exchanged with the host page when this widget is running inside the
+// loader script's iframe (frontend/public/widget.js). See that file for the other side.
+const WIDGET_MSG_SOURCE = 'chatliox-widget'
+const LOADER_MSG_SOURCE = 'chatliox-loader'
+
+function postToParent(payload: Record<string, unknown>) {
+  window.parent.postMessage({ source: WIDGET_MSG_SOURCE, ...payload }, '*')
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function WidgetPage() {
   const [searchParams] = useSearchParams()
   const widgetKey = searchParams.get('key') ?? ''
+  const isEmbedded = searchParams.get('embed') === '1'
 
-  const [isOpen, setIsOpen] = useState(false)
+  const [standaloneOpen, setStandaloneOpen] = useState(false)
+  const [embeddedOpen, setEmbeddedOpen] = useState(false)
+  const isOpen = isEmbedded ? embeddedOpen : standaloneOpen
   const [visitorId] = useState(() => getOrCreateVisitorId(widgetKey))
   const [conversationId, setConversationId] = useState<string | null>(
     () => getStoredConversationId(widgetKey)
@@ -75,6 +87,25 @@ export default function WidgetPage() {
     document.body.style.background = 'transparent'
   }, [])
 
+  // Embedded mode: the loader script owns the launcher bubble and toggles this
+  // iframe's own visibility, telling us via postMessage instead of a local click.
+  useEffect(() => {
+    if (!isEmbedded) return
+    const handler = (event: MessageEvent) => {
+      const data = event.data as { source?: string; type?: string; open?: boolean } | null
+      if (!data || data.source !== LOADER_MSG_SOURCE) return
+      if (data.type === 'visibility') setEmbeddedOpen(Boolean(data.open))
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [isEmbedded])
+
+  // Tell the loader script we're ready and hand it the brand color for its bubble.
+  useEffect(() => {
+    if (!isEmbedded || !widgetConfig) return
+    postToParent({ type: 'ready', color: brandColor })
+  }, [isEmbedded, widgetConfig, brandColor])
+
   if (!widgetKey) {
     return (
       <div className="fixed bottom-5 right-5">
@@ -88,35 +119,62 @@ export default function WidgetPage() {
     setConversationId(id)
   }
 
+  const handleClose = () => {
+    if (isEmbedded) postToParent({ type: 'close' })
+    else setStandaloneOpen(false)
+  }
+
+  const handleIncomingAdminMessage = useCallback(() => {
+    if (isEmbedded && !embeddedOpen) postToParent({ type: 'unread' })
+  }, [isEmbedded, embeddedOpen])
+
+  const panel = (
+    <div
+      className={
+        isEmbedded
+          ? 'w-full h-full bg-white flex flex-col overflow-hidden'
+          : `pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
+              isOpen
+                ? 'opacity-100 scale-100 translate-y-0'
+                : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
+            }`
+      }
+      aria-hidden={!isEmbedded && !isOpen}
+    >
+      <PanelHeader onClose={handleClose} adminName={adminName} brandColor={brandColor} />
+      {conversationId ? (
+        <ChatView
+          conversationId={conversationId}
+          visitorId={visitorId}
+          onAdminName={setAdminName}
+          convStatus={convStatus}
+          onStatusChange={setConvStatus}
+          brandColor={brandColor}
+          onIncomingAdminMessage={handleIncomingAdminMessage}
+        />
+      ) : (
+        <WelcomeView
+          visitorId={visitorId}
+          widgetKey={widgetKey}
+          onConversationCreated={handleConversationCreated}
+          brandColor={brandColor}
+          greeting={greeting}
+        />
+      )}
+    </div>
+  )
+
+  // Embedded mode: the loader script's iframe is already sized/positioned to
+  // exactly fit the panel, and it owns the launcher bubble — just fill the frame.
+  if (isEmbedded) return panel
+
   return (
     <div className="fixed inset-0 flex items-end justify-end p-5 pointer-events-none">
-
-      {/* ── Chat panel ─────────────────────────────────────────────────────── */}
-      <div
-        className={`pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
-          isOpen
-            ? 'opacity-100 scale-100 translate-y-0'
-            : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
-        }`}
-        aria-hidden={!isOpen}
-      >
-        <PanelHeader onClose={() => setIsOpen(false)} adminName={adminName} brandColor={brandColor} />
-        {conversationId ? (
-          <ChatView conversationId={conversationId} visitorId={visitorId} onAdminName={setAdminName} convStatus={convStatus} onStatusChange={setConvStatus} brandColor={brandColor} />
-        ) : (
-          <WelcomeView
-            visitorId={visitorId}
-            widgetKey={widgetKey}
-            onConversationCreated={handleConversationCreated}
-            brandColor={brandColor}
-            greeting={greeting}
-          />
-        )}
-      </div>
+      {panel}
 
       {/* ── Launcher button ─────────────────────────────────────────────────── */}
       <button
-        onClick={() => setIsOpen((v) => !v)}
+        onClick={() => setStandaloneOpen((v) => !v)}
         style={{ backgroundColor: brandColor }}
         className="pointer-events-auto w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 flex-shrink-0"
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
@@ -261,9 +319,10 @@ interface ChatViewProps {
   convStatus: ConversationStatus | null
   onStatusChange: (s: ConversationStatus) => void
   brandColor: string
+  onIncomingAdminMessage: () => void
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -316,10 +375,9 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
 
     const connect = () => {
       wsRef.current?.close()
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = import.meta.env.DEV
-        ? window.location.host
-        : (import.meta.env.VITE_API_URL as string).replace(/^https?:\/\//, '')
+      const apiUrl = import.meta.env.VITE_API_URL as string
+      const proto = apiUrl.startsWith('https:') ? 'wss:' : 'ws:'
+      const host = apiUrl.replace(/^https?:\/\//, '')
       const ws = new WebSocket(
         `${proto}//${host}/ws/conversations/${conversationId}?visitor_id=${visitorId}`
       )
@@ -328,7 +386,10 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
       ws.onmessage = (event: MessageEvent) => {
         try {
           const evt = JSON.parse(event.data as string) as WsEvent
-          if (evt.type === 'message' && !evt.is_internal) appendMessage(evt)
+          if (evt.type === 'message' && !evt.is_internal) {
+            appendMessage(evt)
+            if (evt.sender_type === 'admin') onIncomingAdminMessage()
+          }
           else if (evt.type === 'typing') setAdminTyping(evt.is_typing)
           else if (evt.type === 'status') onStatusChange(evt.status)
         } catch {
@@ -351,7 +412,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
       wsRef.current?.close()
       wsRef.current = null
     }
-  }, [conversationId, visitorId, appendMessage])
+  }, [conversationId, visitorId, appendMessage, onIncomingAdminMessage])
 
   const sendTyping = useCallback((isTyping: boolean) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
