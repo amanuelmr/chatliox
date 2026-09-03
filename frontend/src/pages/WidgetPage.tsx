@@ -100,10 +100,20 @@ export default function WidgetPage() {
     return () => window.removeEventListener('message', handler)
   }, [isEmbedded])
 
-  // Tell the loader script we're ready and hand it the brand color for its bubble.
+  // Tell the loader script we're ready and hand it the org's widget layout so the
+  // launcher bubble/iframe match dashboard settings without any script-tag config.
   useEffect(() => {
     if (!isEmbedded || !widgetConfig) return
-    postToParent({ type: 'ready', color: brandColor })
+    postToParent({
+      type: 'ready',
+      color: brandColor,
+      position: widgetConfig.widget_position,
+      iconUrl: widgetConfig.widget_icon_url,
+      width: widgetConfig.widget_width,
+      height: widgetConfig.widget_height,
+      offsetX: widgetConfig.widget_offset_x,
+      offsetY: widgetConfig.widget_offset_y,
+    })
   }, [isEmbedded, widgetConfig, brandColor])
 
   if (!widgetKey) {

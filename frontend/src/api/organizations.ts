@@ -1,15 +1,27 @@
 import client from './client'
-import type { Member, Organization, UserRole } from '@/types/auth'
+import type { Member, Organization, UserRole, WidgetPosition } from '@/types/auth'
 
 export interface WidgetConfig {
   name: string
   widget_color: string
   widget_greeting: string
+  widget_position: WidgetPosition
+  widget_icon_url: string | null
+  widget_width: number
+  widget_height: number
+  widget_offset_x: number
+  widget_offset_y: number
 }
 
 export interface UpdateWidgetConfigRequest {
   widget_color?: string
   widget_greeting?: string
+  widget_position?: WidgetPosition
+  widget_icon_url?: string
+  widget_width?: number
+  widget_height?: number
+  widget_offset_x?: number
+  widget_offset_y?: number
 }
 
 export const rotateInviteToken = (): Promise<{ invite_token: string }> =>

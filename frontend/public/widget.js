@@ -4,7 +4,12 @@
  * Usage:
  *   <script src="https://your-chatliox-frontend.com/widget.js" data-widget-key="YOUR_WIDGET_KEY" async></script>
  *
- * Optional attributes: data-position="left|right" (default "right").
+ * That's it — launcher position, icon, color, size and offsets are all controlled
+ * from the Chatliox dashboard (Settings → Widget appearance), so integrators never
+ * need to edit this snippet to match their site.
+ *
+ * Optional attributes, for when a page needs to override the dashboard setting:
+ *   data-position="left|right" (pins the launcher to one side regardless of dashboard config)
  * Optional pre-load config (set before this script runs):
  *   window.chatlioxSettings = { widgetKey: '...', position: 'right' }
  *
@@ -23,7 +28,11 @@
     console.error('[Chatliox] Missing widget key. Add data-widget-key to the <script> tag.')
     return
   }
-  var side = (CURRENT_SCRIPT.getAttribute('data-position') || settings.position) === 'left' ? 'left' : 'right'
+
+  // A script-tag/settings position is an explicit override that wins over whatever
+  // the dashboard has configured; otherwise the org's dashboard setting applies once loaded.
+  var explicitPositionAttr = CURRENT_SCRIPT.getAttribute('data-position') || settings.position
+  var explicitPosition = explicitPositionAttr === 'left' || explicitPositionAttr === 'right' ? explicitPositionAttr : null
 
   var MSG_SOURCE_WIDGET = 'chatliox-widget'
   var MSG_SOURCE_LOADER = 'chatliox-loader'
@@ -37,16 +46,22 @@
   var unreadCount = 0
   var brandColor = '#4f6ef7'
 
+  // Layout defaults — reconciled with the org's dashboard settings once the widget
+  // iframe reports in via the 'ready' message. Kept here so the launcher renders
+  // instantly instead of waiting on the iframe to load.
+  var side = explicitPosition || 'right'
+  var width = 376
+  var height = 600
+  var offsetX = 20
+  var offsetY = 20
+  var iconUrl = null
+
   var iframe = document.createElement('iframe')
   iframe.src = FRONTEND_ORIGIN + '/widget?key=' + encodeURIComponent(widgetKey) + '&embed=1'
   iframe.title = 'Chat widget'
   iframe.setAttribute('allow', 'clipboard-write')
   iframe.style.cssText = [
     'position:fixed',
-    'bottom:92px',
-    side + ':20px',
-    'width:376px',
-    'height:600px',
     'max-height:calc(100vh - 120px)',
     'max-width:calc(100vw - 40px)',
     'border:none',
@@ -56,7 +71,6 @@
     'opacity:0',
     'pointer-events:none',
     'transform:translateY(12px) scale(0.98)',
-    'transform-origin:bottom ' + side,
     'transition:opacity 160ms ease,transform 160ms ease',
     'color-scheme:light',
   ].join(';')
@@ -67,8 +81,6 @@
   bubble.setAttribute('aria-label', 'Open chat')
   bubble.style.cssText = [
     'position:fixed',
-    'bottom:20px',
-    side + ':20px',
     'width:56px',
     'height:56px',
     'border-radius:50%',
@@ -84,7 +96,6 @@
     'padding:0',
     'transition:transform 150ms ease,background 150ms ease',
   ].join(';')
-  bubble.innerHTML = CHAT_ICON
   bubble.addEventListener('mouseenter', function () { bubble.style.transform = 'scale(1.06)' })
   bubble.addEventListener('mouseleave', function () { bubble.style.transform = 'scale(1)' })
   document.body.appendChild(bubble)
@@ -93,7 +104,6 @@
   badge.style.cssText = [
     'position:absolute',
     'top:-2px',
-    (side === 'left' ? 'right' : 'left') + ':-2px',
     'min-width:18px',
     'height:18px',
     'padding:0 4px',
@@ -105,7 +115,6 @@
     'display:none',
     'box-shadow:0 0 0 2px #fff',
   ].join(';')
-  bubble.appendChild(badge)
 
   function updateBadge() {
     if (unreadCount > 0) {
@@ -115,6 +124,53 @@
       badge.style.display = 'none'
     }
   }
+
+  // Renders the launcher's icon: the close glyph while open, the org's custom
+  // icon image when set, otherwise the built-in chat glyph. Uses DOM APIs rather
+  // than string-built HTML for the custom icon since iconUrl is untrusted input.
+  function renderBubbleIcon() {
+    while (bubble.firstChild) bubble.removeChild(bubble.firstChild)
+    if (isOpen) {
+      bubble.innerHTML = CLOSE_ICON
+    } else if (iconUrl) {
+      var img = document.createElement('img')
+      img.alt = ''
+      img.style.cssText = 'width:28px;height:28px;border-radius:50%;object-fit:cover;pointer-events:none'
+      img.onerror = function () {
+        iconUrl = null
+        renderBubbleIcon()
+      }
+      img.src = iconUrl
+      bubble.appendChild(img)
+    } else {
+      bubble.innerHTML = CHAT_ICON
+    }
+    bubble.appendChild(badge)
+  }
+
+  // Re-applies side/size/offsets to the iframe and bubble. Called on init and
+  // again whenever the widget iframe reports the org's dashboard settings.
+  function applyLayout() {
+    var other = side === 'left' ? 'right' : 'left'
+
+    iframe.style.width = width + 'px'
+    iframe.style.height = height + 'px'
+    iframe.style.bottom = (offsetY + 56 + 16) + 'px'
+    iframe.style[side] = offsetX + 'px'
+    iframe.style[other] = ''
+    iframe.style.transformOrigin = 'bottom ' + side
+
+    bubble.style.bottom = offsetY + 'px'
+    bubble.style[side] = offsetX + 'px'
+    bubble.style[other] = ''
+
+    badge.style[other] = '-2px'
+    badge.style[side] = ''
+
+    renderBubbleIcon()
+  }
+
+  applyLayout()
 
   function postToWidget(payload) {
     if (iframe.contentWindow) {
@@ -127,8 +183,7 @@
     iframe.style.opacity = next ? '1' : '0'
     iframe.style.pointerEvents = next ? 'auto' : 'none'
     iframe.style.transform = next ? 'translateY(0) scale(1)' : 'translateY(12px) scale(0.98)'
-    bubble.innerHTML = next ? CLOSE_ICON : CHAT_ICON
-    bubble.appendChild(badge)
+    renderBubbleIcon()
     bubble.setAttribute('aria-label', next ? 'Close chat' : 'Open chat')
     if (next) {
       unreadCount = 0
@@ -151,6 +206,15 @@
         brandColor = data.color
         bubble.style.background = brandColor
       }
+      if (!explicitPosition && (data.position === 'left' || data.position === 'right')) {
+        side = data.position
+      }
+      if (typeof data.width === 'number' && data.width > 0) width = data.width
+      if (typeof data.height === 'number' && data.height > 0) height = data.height
+      if (typeof data.offsetX === 'number' && data.offsetX >= 0) offsetX = data.offsetX
+      if (typeof data.offsetY === 'number' && data.offsetY >= 0) offsetY = data.offsetY
+      iconUrl = data.iconUrl || null
+      applyLayout()
     } else if (data.type === 'close') {
       setOpen(false)
     } else if (data.type === 'unread') {

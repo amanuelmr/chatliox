@@ -141,7 +141,18 @@ async def update_widget(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> OrganizationInfo:
-    org = await update_widget_config(db, current_user.organization_id, body.widget_color, body.widget_greeting)
+    org = await update_widget_config(
+        db,
+        current_user.organization_id,
+        body.widget_color,
+        body.widget_greeting,
+        body.widget_position,
+        body.widget_icon_url,
+        body.widget_width,
+        body.widget_height,
+        body.widget_offset_x,
+        body.widget_offset_y,
+    )
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org

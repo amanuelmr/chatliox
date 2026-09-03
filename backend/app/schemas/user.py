@@ -14,6 +14,12 @@ class OrganizationInfo(BaseModel):
     invite_token: str
     widget_color: str
     widget_greeting: str
+    widget_position: str
+    widget_icon_url: str | None
+    widget_width: int
+    widget_height: int
+    widget_offset_x: int
+    widget_offset_y: int
 
 
 class UserResponse(BaseModel):

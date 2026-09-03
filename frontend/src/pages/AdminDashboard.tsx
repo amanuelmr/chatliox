@@ -16,7 +16,7 @@ import {
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
-import type { Member, User, UserRole } from '@/types/auth'
+import type { Member, User, UserRole, WidgetPosition } from '@/types/auth'
 
 type View = 'inbox' | 'analytics' | 'settings'
 
@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   useDashboardSocket(token)
 
   const embedCode = user?.organization
-    ? `<iframe src="${window.location.origin}/widget?key=${user.organization.widget_key}" style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:none;z-index:2147483647;background:transparent;" allowtransparency="true" title="Chat Support"></iframe>`
+    ? `<script src="${window.location.origin}/widget.js" data-widget-key="${user.organization.widget_key}" async><\/script>`
     : ''
 
   const copyEmbed = () => {
@@ -456,14 +456,33 @@ function WidgetAppearanceCard({
   token: string | null
   setAuth: (token: string, user: User) => void
 }) {
-  const [color, setColor] = useState(user?.organization?.widget_color ?? '#4f6ef7')
-  const [greeting, setGreeting] = useState(user?.organization?.widget_greeting ?? '')
+  const org = user?.organization
+  const [color, setColor] = useState(org?.widget_color ?? '#4f6ef7')
+  const [greeting, setGreeting] = useState(org?.widget_greeting ?? '')
+  const [position, setPosition] = useState<WidgetPosition>(org?.widget_position ?? 'right')
+  const [iconUrl, setIconUrl] = useState(org?.widget_icon_url ?? '')
+  const [width, setWidth] = useState(org?.widget_width ?? 376)
+  const [height, setHeight] = useState(org?.widget_height ?? 600)
+  const [offsetX, setOffsetX] = useState(org?.widget_offset_x ?? 20)
+  const [offsetY, setOffsetY] = useState(org?.widget_offset_y ?? 20)
   const [saved, setSaved] = useState(false)
 
+  const iconUrlValid = iconUrl.trim() === '' || /^https?:\/\/.+/.test(iconUrl.trim())
+
   const { mutate: save, isPending: saving } = useMutation({
-    mutationFn: () => updateWidgetConfig({ widget_color: color, widget_greeting: greeting.trim() }),
-    onSuccess: (org) => {
-      if (token && user) setAuth(token, { ...user, organization: org })
+    mutationFn: () =>
+      updateWidgetConfig({
+        widget_color: color,
+        widget_greeting: greeting.trim(),
+        widget_position: position,
+        widget_icon_url: iconUrl.trim(),
+        widget_width: width,
+        widget_height: height,
+        widget_offset_x: offsetX,
+        widget_offset_y: offsetY,
+      }),
+    onSuccess: (updatedOrg) => {
+      if (token && user) setAuth(token, { ...user, organization: updatedOrg })
       setSaved(true)
       setTimeout(() => setSaved(false), 2_000)
     },
@@ -473,7 +492,9 @@ function WidgetAppearanceCard({
     <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
       <div>
         <p className="text-sm font-semibold text-zinc-900">Widget appearance</p>
-        <p className="text-xs text-zinc-500 mt-0.5">Customize the brand color and greeting visitors see.</p>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Customize color, launcher icon, position and size — visitors see this without any changes to the install snippet.
+        </p>
       </div>
 
       <div className="flex items-center gap-3">
@@ -500,9 +521,68 @@ function WidgetAppearanceCard({
         className="rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-none"
       />
 
+      <div>
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Launcher position</p>
+        <div className="flex gap-2">
+          {(['right', 'left'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setPosition(p)}
+              className={`flex-1 text-sm rounded-lg px-3 py-2 ring-1 transition-all duration-150 ${
+                position === p
+                  ? 'bg-brand-50 ring-brand-300 text-brand-700 font-medium'
+                  : 'ring-zinc-200 text-zinc-600 hover:bg-zinc-50'
+              }`}
+            >
+              Bottom {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Launcher icon</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-zinc-200">
+            {iconUrl.trim() && iconUrlValid ? (
+              <img src={iconUrl.trim()} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-zinc-400 text-xs">💬</span>
+            )}
+          </div>
+          <input
+            type="text"
+            value={iconUrl}
+            onChange={(e) => setIconUrl(e.target.value)}
+            placeholder="https://example.com/icon.png (optional)"
+            className={`flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-100 transition ${
+              iconUrlValid ? 'border-zinc-200 focus:border-brand-500' : 'border-red-300 focus:border-red-400'
+            }`}
+          />
+          {iconUrl && (
+            <button
+              type="button"
+              onClick={() => setIconUrl('')}
+              className="text-xs text-zinc-500 hover:text-zinc-700 flex-shrink-0"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        {!iconUrlValid && <p className="text-xs text-red-500 mt-1">Must be a full http(s) image URL.</p>}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Panel width" value={width} onChange={setWidth} min={320} max={520} />
+        <NumberField label="Panel height" value={height} onChange={setHeight} min={400} max={800} />
+        <NumberField label="Side offset" value={offsetX} onChange={setOffsetX} min={0} max={200} />
+        <NumberField label="Bottom offset" value={offsetY} onChange={setOffsetY} min={0} max={200} />
+      </div>
+
       <button
         onClick={() => save()}
-        disabled={saving || !greeting.trim() || !/^#[0-9a-fA-F]{6}$/.test(color)}
+        disabled={saving || !greeting.trim() || !/^#[0-9a-fA-F]{6}$/.test(color) || !iconUrlValid}
         className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
           saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
         }`}
@@ -510,6 +590,34 @@ function WidgetAppearanceCard({
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
       </button>
     </div>
+  )
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string
+  value: number
+  onChange: (n: number) => void
+  min: number
+  max: number
+}) {
+  return (
+    <label className="text-xs font-medium text-zinc-700 flex flex-col gap-1.5">
+      {label}
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(Math.min(max, Math.max(min, Number(e.target.value) || min)))}
+        className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
+      />
+    </label>
   )
 }
 

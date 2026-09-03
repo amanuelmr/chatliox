@@ -1,9 +1,17 @@
+export type WidgetPosition = 'left' | 'right'
+
 export interface Organization {
   name: string
   widget_key: string
   invite_token: string
   widget_color: string
   widget_greeting: string
+  widget_position: WidgetPosition
+  widget_icon_url: string | null
+  widget_width: number
+  widget_height: number
+  widget_offset_x: number
+  widget_offset_y: number
 }
 
 export type UserRole = 'admin' | 'agent'

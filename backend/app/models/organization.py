@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Index, String
+from sqlalchemy import Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,6 +27,12 @@ class Organization(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         server_default="Send us a message and we'll get back to you shortly.",
     )
+    widget_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="right")
+    widget_icon_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    widget_width: Mapped[int] = mapped_column(Integer, nullable=False, server_default="376")
+    widget_height: Mapped[int] = mapped_column(Integer, nullable=False, server_default="600")
+    widget_offset_x: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
+    widget_offset_y: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
 
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
