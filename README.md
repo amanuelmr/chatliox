@@ -24,7 +24,7 @@ The project includes:
 - Team invites and role-based access
 - Saved canned responses agents can insert into replies
 - Conversation tags and full-text search across the inbox
-- Customizable widget branding (color and greeting message)
+- Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
 - An analytics view with volume, first response time, and per-agent stats
 - Visitor CSAT ratings on resolved conversations
 - Email verification for new accounts, sent via Resend
@@ -143,12 +143,12 @@ After creating an account, copy the widget key from the dashboard and add one sc
 
 That's it — no cloning this repo, no iframe sizing to get right by hand. The script injects a launcher bubble and a chat panel that stay out of the way of the rest of the page, shows a badge when a reply arrives while the panel is closed, and cleans up after itself if you remove the tag.
 
-Options:
+Launcher position, icon, brand color, panel size and edge offsets are all controlled from Settings → Widget appearance in the dashboard — no snippet changes needed when they change. The one script-tag override available is:
 
-- `data-position="left"` — anchor the widget to the bottom-left instead of the default bottom-right.
+- `data-position="left"` — pins the launcher to the bottom-left regardless of the dashboard setting (useful if a specific page needs to differ from the org default).
 - `window.chatliox.open()` / `.close()` / `.toggle()` — control the widget programmatically from the host page's own JavaScript.
 
-If you'd rather host the chat panel yourself inside a fixed-size box you control (e.g. inside an existing support page), the old direct iframe embed still works:
+If you'd rather host the chat panel yourself inside a fixed-size box you control (e.g. inside an existing support page), the old direct iframe embed still works — note it always renders the panel itself, so position/size/icon settings from the dashboard don't apply; you control that layout with your own CSS:
 
 ```html
 <iframe
