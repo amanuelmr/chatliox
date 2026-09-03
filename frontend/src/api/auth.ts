@@ -24,3 +24,9 @@ export const verifyEmail = (token: string): Promise<TokenResponse> =>
 
 export const resendVerification = (email: string): Promise<void> =>
   client.post('/auth/resend-verification', { email }).then(() => undefined)
+
+export const forgotPassword = (email: string): Promise<void> =>
+  client.post('/auth/forgot-password', { email }).then(() => undefined)
+
+export const resetPassword = (token: string, password: string): Promise<TokenResponse> =>
+  client.post<TokenResponse>(`/auth/reset-password/${token}`, { password }).then((r) => r.data)

@@ -14,6 +14,7 @@ from app.models.base import TimestampMixin, UUIDMixin
 
 class VerificationPurpose(str, enum.Enum):
     EMAIL_VERIFY = "email_verify"
+    PASSWORD_RESET = "password_reset"
 
 
 class VerificationToken(UUIDMixin, TimestampMixin, Base):

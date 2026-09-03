@@ -69,6 +69,31 @@ async def send_verification_email(to_email: str, full_name: str, verify_url: str
     await _send(to_email, subject, html_body)
 
 
+async def send_password_reset_email(to_email: str, full_name: str, reset_url: str) -> None:
+    subject = "Reset your Chatliox password"
+    html_body = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+      <h2 style="font-size:20px;font-weight:600;color:#111827;margin:0 0 8px">
+        Reset your password
+      </h2>
+      <p style="font-size:14px;color:#6b7280;margin:0 0 24px;line-height:1.6">
+        Hi {full_name}, we received a request to reset your Chatliox password. Click the
+        button below to choose a new one. If you didn't request this, you can ignore this email.
+      </p>
+      <a href="{reset_url}"
+         style="display:inline-block;background:#4f6ef7;color:#fff;font-size:14px;
+                font-weight:600;text-decoration:none;padding:12px 24px;border-radius:8px">
+        Reset password →
+      </a>
+      <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6">
+        Or copy this link: <a href="{reset_url}" style="color:#4f6ef7">{reset_url}</a>
+        This link expires in 1 hour.
+      </p>
+    </div>
+    """
+    await _send(to_email, subject, html_body)
+
+
 async def send_unanswered_alert_email(
     to_email: str, visitor_label: str, minutes: int, conversation_url: str
 ) -> None:

@@ -28,6 +28,7 @@ The project includes:
 - An analytics view with volume, first response time, and per-agent stats
 - Visitor CSAT ratings on resolved conversations
 - Email verification for new accounts, sent via Resend
+- Self-service password reset via an emailed, expiring link
 
 ## What Problem It Solves
 

@@ -6,16 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.email import send_verification_email
+from app.core.email import send_password_reset_email, send_verification_email
 from app.core.limiter import limiter
 from app.core.security import create_access_token, verify_password
 from app.models.user import User
 from app.schemas.auth import (
     AcceptInviteRequest,
+    ForgotPasswordRequest,
     InviteInfoResponse,
     LoginRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     VerifyEmailRequest,
 )
@@ -23,7 +25,12 @@ from app.schemas.user import UserResponse
 from app.models.user import UserRole
 from app.services.organization import create_organization, get_organization_by_invite_token
 from app.services.user import create_user, get_user_by_email
-from app.services.verification import create_verification_token, consume_verification_token
+from app.services.verification import (
+    consume_verification_token,
+    create_password_reset_token,
+    create_verification_token,
+    reset_password,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -42,6 +49,17 @@ async def _send_verification(db: AsyncSession, user: User) -> None:
         await send_verification_email(user.email, user.full_name, verify_url)
     except Exception as exc:
         logger.exception("Failed to send verification email to %s: %s", user.email, exc)
+
+
+async def _send_password_reset(db: AsyncSession, user: User) -> None:
+    try:
+        raw_token = await create_password_reset_token(db, user.id)
+        if raw_token is None:
+            return
+        reset_url = f"{_base_url()}/reset-password/{raw_token}"
+        await send_password_reset_email(user.email, user.full_name, reset_url)
+    except Exception as exc:
+        logger.exception("Failed to send password reset email to %s: %s", user.email, exc)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -110,3 +128,24 @@ async def resend_verification(
     if user is not None and not user.is_verified:
         await _send_verification(db, user)
     # Always return the same response — don't reveal whether the address exists or is verified.
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> None:
+    user = await get_user_by_email(db, body.email)
+    if user is not None:
+        await _send_password_reset(db, user)
+    # Always return the same response — don't reveal whether the address is registered.
+
+
+@router.post("/reset-password/{token}", response_model=TokenResponse)
+async def reset_password_endpoint(
+    token: str, body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    user = await reset_password(db, token, body.password)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset link")
+    return TokenResponse(access_token=create_access_token(str(user.id)))

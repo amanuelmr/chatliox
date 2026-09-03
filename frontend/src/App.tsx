@@ -5,11 +5,13 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AdminDashboard from '@/pages/AdminDashboard'
 import ChatPage from '@/pages/ChatPage'
+import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import JoinPage from '@/pages/JoinPage'
 import GuidePage from '@/pages/GuidePage'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import VerifyEmailPage from '@/pages/VerifyEmailPage'
 import WelcomePage from '@/pages/WelcomePage'
 import WidgetPage from '@/pages/WidgetPage'
@@ -40,6 +42,8 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/join/:token" element={<JoinPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/app" element={<AdminDashboard />} />
           <Route path="/app/c/:id" element={<AdminDashboard />} />
