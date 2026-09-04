@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     <div className="h-screen flex overflow-hidden bg-zinc-100">
 
       {/* ── Slim nav (56px) ──────────────────────────────────────────────────── */}
-      <nav className="w-14 bg-zinc-900 flex flex-col items-center py-4 flex-shrink-0">
+      <nav className="w-14 bg-white border-r border-zinc-200 flex flex-col items-center py-4 flex-shrink-0">
         <div className="flex flex-col gap-1 flex-1">
           <NavBtn title="Inbox" active={view === 'inbox'} onClick={() => { setView('inbox'); navigate('/app') }}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -143,7 +143,7 @@ function UserMenu({ user, initials, onSignOut }: { user: User | null; initials: 
         className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 text-xs font-semibold ring-2 ring-transparent ${
           open
             ? 'bg-brand-500 text-white ring-brand-400/50'
-            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
+            : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
         }`}
       >
         {initials}
@@ -797,7 +797,7 @@ function NavBtn({
       onClick={onClick}
       title={title}
       className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-        active ? 'bg-white/15 text-white' : 'text-zinc-500 hover:bg-white/10 hover:text-zinc-300'
+        active ? 'bg-brand-50 text-brand-600' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
       }`}
     >
       {children}
@@ -809,7 +809,7 @@ function EmptyState({ onInstall, copied }: { onInstall: () => void; copied: bool
   return (
     <div className="h-full flex items-center justify-center p-8">
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-zinc-200 p-10 flex flex-col items-center gap-5 text-center max-w-sm w-full">
-        <div className="w-14 h-14 bg-zinc-900 rounded-2xl flex items-center justify-center">
+        <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center">
           <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
           </svg>
