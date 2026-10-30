@@ -1,10 +1,9 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { getMe } from '@/api/auth'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AdminDashboard from '@/pages/AdminDashboard'
-import ChatPage from '@/pages/ChatPage'
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage'
 import JoinPage from '@/pages/JoinPage'
 import GuidePage from '@/pages/GuidePage'
@@ -47,12 +46,18 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/app" element={<AdminDashboard />} />
           <Route path="/app/c/:id" element={<AdminDashboard />} />
-          <Route path="/chat/:id" element={<ChatPage />} />
           <Route path="/welcome" element={<WelcomePage />} />
         </Route>
+        <Route path="/chat/:id" element={<LegacyChatRedirect />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>
   )
+}
+
+// /chat/:id was the original per-conversation page; send old links to the dashboard view.
+function LegacyChatRedirect() {
+  const { id } = useParams<{ id: string }>()
+  return <Navigate to={`/app/c/${id}`} replace />
 }
