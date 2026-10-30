@@ -83,6 +83,18 @@ Main tools used:
 
 ## Getting Started
 
+### With Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+This starts a local Postgres, the API with hot reload on http://localhost:8000 (migrations run on startup), and the dashboard on http://localhost:5173. Nothing touches your hosted database, and no `.env` files are needed. If those ports are taken, override them: `API_PORT=8010 WEB_PORT=5174 docker compose up --build`. Open a database shell with `docker compose exec db psql -U chatliox`.
+
+Without a `RESEND_API_KEY`, emails are written to the API log instead of being sent, so you can open the verification link from `docker compose logs api`. Export the key before running the command to send real email.
+
+To run the services without Docker instead:
+
 ### Backend
 
 ```bash
