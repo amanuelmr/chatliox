@@ -18,6 +18,7 @@ import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 
 const DEFAULT_BRAND_COLOR = '#4f6ef7'
 const DEFAULT_GREETING = "Send us a message and we'll get back to you shortly."
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function widgetErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -77,10 +78,14 @@ export default function WidgetPage() {
   const { data: widgetConfig } = useQuery({
     queryKey: ['widget-config', widgetKey],
     queryFn: () => getWidgetConfig(widgetKey),
-    staleTime: Infinity,
+    // Re-check every minute so the widget flips into or out of away mode as
+    // business hours start and end, without the visitor reloading the page.
+    refetchInterval: 60_000,
   })
   const brandColor = widgetConfig?.widget_color ?? DEFAULT_BRAND_COLOR
   const greeting = widgetConfig?.widget_greeting ?? DEFAULT_GREETING
+  const isOnline = widgetConfig?.is_online ?? true
+  const awayMessage = widgetConfig?.away_message ?? ''
 
   useEffect(() => {
     document.documentElement.style.background = 'transparent'
@@ -151,7 +156,7 @@ export default function WidgetPage() {
       }
       aria-hidden={!isEmbedded && !isOpen}
     >
-      <PanelHeader onClose={handleClose} adminName={adminName} brandColor={brandColor} />
+      <PanelHeader onClose={handleClose} adminName={adminName} brandColor={brandColor} isOnline={isOnline} />
       {conversationId ? (
         <ChatView
           conversationId={conversationId}
@@ -161,6 +166,7 @@ export default function WidgetPage() {
           onStatusChange={setConvStatus}
           brandColor={brandColor}
           onIncomingAdminMessage={handleIncomingAdminMessage}
+          isOnline={isOnline}
         />
       ) : (
         <WelcomeView
@@ -168,7 +174,8 @@ export default function WidgetPage() {
           widgetKey={widgetKey}
           onConversationCreated={handleConversationCreated}
           brandColor={brandColor}
-          greeting={greeting}
+          greeting={isOnline ? greeting : awayMessage}
+          isOnline={isOnline}
         />
       )}
     </div>
@@ -210,10 +217,12 @@ function PanelHeader({
   onClose,
   adminName,
   brandColor,
+  isOnline,
 }: {
   onClose: () => void
   adminName: string | null
   brandColor: string
+  isOnline: boolean
 }) {
   return (
     <div style={{ backgroundColor: brandColor }} className="px-5 py-4 flex items-center justify-between flex-shrink-0">
@@ -225,8 +234,9 @@ function PanelHeader({
         </div>
         <div>
           <p className="text-white font-semibold text-sm leading-tight tracking-tight">{adminName ?? 'Support'}</p>
-          <p className="text-white/50 text-xs mt-0.5">
-            {adminName ? 'Here to help you' : 'We typically reply in a few minutes'}
+          <p className="text-white/50 text-xs mt-0.5 flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-white/40'}`} />
+            {!isOnline ? "Away · we'll reply by email" : adminName ? 'Here to help you' : 'We typically reply in a few minutes'}
           </p>
         </div>
       </div>
@@ -251,17 +261,24 @@ interface WelcomeViewProps {
   onConversationCreated: (id: string) => void
   brandColor: string
   greeting: string
+  isOnline: boolean
 }
 
-function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, greeting }: WelcomeViewProps) {
+function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, greeting, isOnline }: WelcomeViewProps) {
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [firstMessage, setFirstMessage] = useState('')
+
+  // While away, an email is required so the team can follow up (the API enforces this too).
+  const emailValid = EMAIL_PATTERN.test(email.trim())
+  const canSubmit = firstMessage.trim() !== '' && (isOnline ? email.trim() === '' || emailValid : emailValid)
 
   const { mutate: startChat, isPending, error: startError } = useMutation({
     mutationFn: async () => {
       const conv = await createConversation({
         visitor_id: visitorId,
         visitor_name: name.trim() || undefined,
+        visitor_email: email.trim() || undefined,
         widget_key: widgetKey,
       })
       if (firstMessage.trim()) {
@@ -290,6 +307,14 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, 
           onChange={(e) => setName(e.target.value)}
           className="w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
         />
+        <input
+          type="email"
+          placeholder={isOnline ? 'Your email (optional)' : 'Your email'}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required={!isOnline}
+          className="w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+        />
         <textarea
           placeholder="How can we help you?"
           value={firstMessage}
@@ -304,7 +329,7 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, 
 
         <button
           onClick={() => startChat()}
-          disabled={!firstMessage.trim() || isPending}
+          disabled={!canSubmit || isPending}
           style={{ backgroundColor: brandColor }}
           className="w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
         >
@@ -313,7 +338,7 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, 
               <Spinner size="sm" variant="white" />
               Starting…
             </span>
-          ) : 'Send message →'}
+          ) : isOnline ? 'Send message →' : 'Leave a message →'}
         </button>
       </div>
     </div>
@@ -330,9 +355,10 @@ interface ChatViewProps {
   onStatusChange: (s: ConversationStatus) => void
   brandColor: string
   onIncomingAdminMessage: () => void
+  isOnline: boolean
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -555,6 +581,12 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           </p>
         </div>
       </div>
+
+      {!isOnline && convStatus !== 'closed' && (
+        <p className="mx-3 mb-2 text-center text-xs text-zinc-400">
+          We're away right now — we'll reply here as soon as we're back.
+        </p>
+      )}
 
       {convStatus === 'closed' && <CsatPrompt conversationId={conversationId} visitorId={visitorId} />}
 

@@ -27,6 +27,7 @@ The project includes:
 - Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
 - An analytics view with volume, first response time, and per-agent stats
 - Visitor CSAT ratings on resolved conversations
+- Business hours with an away mode: outside the weekly schedule the widget shows an away message and asks visitors for an email
 - Email verification for new accounts, sent via Resend
 - Self-service password reset via an emailed, expiring link
 
@@ -143,6 +144,8 @@ After creating an account, copy the widget key from the dashboard and add one sc
 ```
 
 That's it — no cloning this repo, no iframe sizing to get right by hand. The script injects a launcher bubble and a chat panel that stay out of the way of the rest of the page, shows a badge when a reply arrives while the panel is closed, and cleans up after itself if you remove the tag.
+
+Business hours live under Settings → Business hours: pick a timezone, set opening times per weekday and write an away message. While the team is outside those hours the widget shows the away message, requires an email before a visitor can start a conversation, and flips back to normal on its own when the schedule opens again.
 
 Launcher position, icon, brand color, panel size and edge offsets are all controlled from Settings → Widget appearance in the dashboard — no snippet changes needed when they change. The one script-tag override available is:
 

@@ -1,5 +1,12 @@
 export type WidgetPosition = 'left' | 'right'
 
+// One entry per weekday, Monday first. Times are 24h "HH:MM" in the org's timezone.
+export interface BusinessHoursDay {
+  enabled: boolean
+  start: string
+  end: string
+}
+
 export interface Organization {
   name: string
   widget_key: string
@@ -12,6 +19,10 @@ export interface Organization {
   widget_height: number
   widget_offset_x: number
   widget_offset_y: number
+  business_hours_enabled: boolean
+  business_hours_timezone: string
+  business_hours: BusinessHoursDay[]
+  away_message: string
 }
 
 export type UserRole = 'admin' | 'agent'
