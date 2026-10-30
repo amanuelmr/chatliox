@@ -26,6 +26,7 @@ from app.services.conversation import (
     update_conversation_status,
     update_conversation_tags,
 )
+from app.services.business_hours import is_within_business_hours
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_widget_key
 from app.websockets.router import org_room
@@ -43,6 +44,14 @@ async def create(
     org = await get_organization_by_widget_key(db, body.widget_key)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid widget key")
+
+    # Outside business hours nobody will reply live, so the visitor must leave
+    # an email or the team has no way to follow up.
+    if not body.visitor_email and not is_within_business_hours(org):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="An email address is required outside business hours",
+        )
 
     conversation = await create_conversation(
         db,

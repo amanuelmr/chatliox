@@ -87,3 +87,24 @@ async def update_widget_config(
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def update_business_hours(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    enabled: bool,
+    timezone: str,
+    schedule: list[dict],
+    away_message: str,
+) -> Organization | None:
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        return None
+    org.business_hours_enabled = enabled
+    org.business_hours_timezone = timezone
+    org.business_hours = schedule
+    org.away_message = away_message
+    await db.commit()
+    await db.refresh(org)
+    return org

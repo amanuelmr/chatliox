@@ -10,8 +10,14 @@ from app.core.deps import get_current_user, require_admin
 from app.core.email import send_invite_email
 from app.models.user import User, UserRole
 from app.schemas.user import MemberResponse, OrganizationInfo
-from app.schemas.widget import UpdateWidgetConfigRequest, WidgetConfigResponse
-from app.services.organization import get_organization_by_widget_key, rotate_invite_token, update_widget_config
+from app.schemas.widget import UpdateBusinessHoursRequest, UpdateWidgetConfigRequest, WidgetConfigResponse
+from app.services.business_hours import is_within_business_hours
+from app.services.organization import (
+    get_organization_by_widget_key,
+    rotate_invite_token,
+    update_business_hours,
+    update_widget_config,
+)
 from app.services.user import get_members_by_org
 
 logger = logging.getLogger(__name__)
@@ -158,6 +164,25 @@ async def update_widget(
     return org
 
 
+@router.put("/business-hours", response_model=OrganizationInfo)
+async def set_business_hours(
+    body: UpdateBusinessHoursRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_business_hours(
+        db,
+        current_user.organization_id,
+        body.business_hours_enabled,
+        body.business_hours_timezone,
+        [day.model_dump() for day in body.business_hours],
+        body.away_message,
+    )
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
 @router.get("/widget/{widget_key}", response_model=WidgetConfigResponse)
 async def get_widget_config(
     widget_key: str,
@@ -166,4 +191,6 @@ async def get_widget_config(
     org = await get_organization_by_widget_key(db, widget_key)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid widget key")
-    return org
+    return WidgetConfigResponse.model_validate(org).model_copy(
+        update={"is_online": is_within_business_hours(org)}
+    )

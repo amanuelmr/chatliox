@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Index, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,6 +14,13 @@ from app.models.base import TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.user import User
+
+
+# Mon–Fri 09:00–17:00, weekends off.
+DEFAULT_BUSINESS_HOURS: list[dict] = [
+    {"enabled": day < 5, "start": "09:00", "end": "17:00"} for day in range(7)
+]
+DEFAULT_BUSINESS_HOURS_JSON = json.dumps(DEFAULT_BUSINESS_HOURS)
 
 
 class Organization(UUIDMixin, TimestampMixin, Base):
@@ -33,6 +42,19 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     widget_height: Mapped[int] = mapped_column(Integer, nullable=False, server_default="600")
     widget_offset_x: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
     widget_offset_y: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
+
+    # When enabled, the widget switches to an away mode outside the weekly schedule.
+    # The schedule is 7 entries, Monday first: {"enabled": bool, "start": "HH:MM", "end": "HH:MM"}.
+    business_hours_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    business_hours_timezone: Mapped[str] = mapped_column(String(64), nullable=False, server_default="UTC")
+    business_hours: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, server_default=text(f"'{DEFAULT_BUSINESS_HOURS_JSON}'::jsonb")
+    )
+    away_message: Mapped[str] = mapped_column(
+        String(280),
+        nullable=False,
+        server_default="We're away right now. Leave a message and we'll get back to you by email.",
+    )
 
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
