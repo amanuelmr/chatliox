@@ -13,6 +13,7 @@ import { createConversation, getVisitorConversationStatus, submitCsat } from '@/
 import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
+import { apiWsUrl } from '@/lib/ws'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 
@@ -411,12 +412,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
 
     const connect = () => {
       wsRef.current?.close()
-      const apiUrl = import.meta.env.VITE_API_URL as string
-      const proto = apiUrl.startsWith('https:') ? 'wss:' : 'ws:'
-      const host = apiUrl.replace(/^https?:\/\//, '')
-      const ws = new WebSocket(
-        `${proto}//${host}/ws/conversations/${conversationId}?visitor_id=${visitorId}`
-      )
+      const ws = new WebSocket(apiWsUrl(`/ws/conversations/${conversationId}?visitor_id=${visitorId}`))
       wsRef.current = ws
 
       ws.onmessage = (event: MessageEvent) => {
