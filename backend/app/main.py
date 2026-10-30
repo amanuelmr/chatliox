@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import Callable
 
@@ -9,6 +10,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.email import email_configured
 from app.core.limiter import limiter
 from app.routers import analytics, auth, canned_responses, conversations, health, messages, organizations
 from app.services.alerts import email_notification_loop
@@ -16,8 +18,16 @@ from app.services.storage import MEDIA_ROOT
 from app.websockets import router as ws_router
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not email_configured():
+        logger.error(
+            "RESEND_API_KEY is not set: sign-up, password reset and invite emails are disabled "
+            "and those endpoints will return 503."
+        )
     task = asyncio.create_task(email_notification_loop())
     try:
         yield

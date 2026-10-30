@@ -27,7 +27,7 @@ services:
       SECRET_KEY: local-dev-secret
       ENVIRONMENT: development
       ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-5173}
-      # Empty skips sending email locally; export RESEND_API_KEY before `up` to test Resend.
+      # Needed for sign-up, password reset and invites; export it before `docker compose up`.
       RESEND_API_KEY: ${RESEND_API_KEY:-}
     ports:
       - "${API_PORT:-8000}:8000"

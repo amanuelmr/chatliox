@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.email import email_configured
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 from app.services.user import get_user_by_id
@@ -54,6 +55,16 @@ async def require_verified_user(current_user: User = Depends(get_current_user)) 
     if not current_user.is_verified:
         raise _403_unverified
     return current_user
+
+
+def require_email_configured() -> None:
+    """Reject requests that only make sense if we can send email, before they
+    create anything or look up an account."""
+    if not email_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email isn't set up on this server yet, so we can't send this email. Please contact the administrator.",
+        )
 
 
 async def require_admin(current_user: User = Depends(require_verified_user)) -> User:
