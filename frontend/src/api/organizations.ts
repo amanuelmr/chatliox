@@ -1,5 +1,5 @@
 import client from './client'
-import type { Member, Organization, UserRole, WidgetPosition } from '@/types/auth'
+import type { BusinessHoursDay, Member, Organization, UserRole, WidgetPosition } from '@/types/auth'
 
 export interface WidgetConfig {
   name: string
@@ -11,6 +11,9 @@ export interface WidgetConfig {
   widget_height: number
   widget_offset_x: number
   widget_offset_y: number
+  business_hours_enabled: boolean
+  away_message: string
+  is_online: boolean
 }
 
 export interface UpdateWidgetConfigRequest {
@@ -22,6 +25,13 @@ export interface UpdateWidgetConfigRequest {
   widget_height?: number
   widget_offset_x?: number
   widget_offset_y?: number
+}
+
+export interface UpdateBusinessHoursRequest {
+  business_hours_enabled: boolean
+  business_hours_timezone: string
+  business_hours: BusinessHoursDay[]
+  away_message: string
 }
 
 export const rotateInviteToken = (): Promise<{ invite_token: string }> =>
@@ -44,3 +54,6 @@ export const getWidgetConfig = (widgetKey: string): Promise<WidgetConfig> =>
 
 export const updateWidgetConfig = (data: UpdateWidgetConfigRequest): Promise<Organization> =>
   client.patch<Organization>('/organizations/widget', data).then((r) => r.data)
+
+export const updateBusinessHours = (data: UpdateBusinessHoursRequest): Promise<Organization> =>
+  client.put<Organization>('/organizations/business-hours', data).then((r) => r.data)

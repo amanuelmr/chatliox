@@ -20,6 +20,10 @@ class OrganizationInfo(BaseModel):
     widget_height: int
     widget_offset_x: int
     widget_offset_y: int
+    business_hours_enabled: bool
+    business_hours_timezone: str
+    business_hours: list[dict]
+    away_message: str
 
 
 class UserResponse(BaseModel):

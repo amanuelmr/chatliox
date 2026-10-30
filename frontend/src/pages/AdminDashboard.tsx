@@ -11,12 +11,13 @@ import {
   removeMember,
   rotateInviteToken,
   sendInviteEmail,
+  updateBusinessHours,
   updateMemberRole,
   updateWidgetConfig,
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
-import type { Member, User, UserRole, WidgetPosition } from '@/types/auth'
+import type { BusinessHoursDay, Member, User, UserRole, WidgetPosition } from '@/types/auth'
 
 type View = 'inbox' | 'analytics' | 'settings'
 
@@ -437,6 +438,9 @@ function SettingsView({
         {/* Widget appearance */}
         <WidgetAppearanceCard user={user} token={token} setAuth={setAuth} />
 
+        {/* Business hours */}
+        <BusinessHoursCard user={user} token={token} setAuth={setAuth} />
+
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
 
@@ -583,6 +587,167 @@ function WidgetAppearanceCard({
       <button
         onClick={() => save()}
         disabled={saving || !greeting.trim() || !/^#[0-9a-fA-F]{6}$/.test(color) || !iconUrlValid}
+        className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
+          saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
+        }`}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
+      </button>
+    </div>
+  )
+}
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const DEFAULT_SCHEDULE: BusinessHoursDay[] = WEEKDAYS.map((_, i) => ({
+  enabled: i < 5,
+  start: '09:00',
+  end: '17:00',
+}))
+
+function timezoneOptions(current: string): string[] {
+  // Intl.supportedValuesOf isn't in the ES2020 lib typings but ships in every evergreen browser.
+  const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf
+  const zones = supported ? supported('timeZone') : []
+  return Array.from(new Set(['UTC', current, ...zones]))
+}
+
+function BusinessHoursCard({
+  user,
+  token,
+  setAuth,
+}: {
+  user: User | null
+  token: string | null
+  setAuth: (token: string, user: User) => void
+}) {
+  const org = user?.organization
+  const [enabled, setEnabled] = useState(org?.business_hours_enabled ?? false)
+  const [timezone, setTimezone] = useState(
+    // Pre-fill the admin's own timezone the first time they turn this on.
+    org?.business_hours_enabled ? org.business_hours_timezone : Intl.DateTimeFormat().resolvedOptions().timeZone,
+  )
+  const [schedule, setSchedule] = useState<BusinessHoursDay[]>(org?.business_hours ?? DEFAULT_SCHEDULE)
+  const [awayMessage, setAwayMessage] = useState(org?.away_message ?? '')
+  const [saved, setSaved] = useState(false)
+
+  const updateDay = (index: number, patch: Partial<BusinessHoursDay>) =>
+    setSchedule((days) => days.map((d, i) => (i === index ? { ...d, ...patch } : d)))
+
+  const invalidDay = schedule.some((d) => d.enabled && d.end <= d.start)
+
+  const { mutate: save, isPending: saving, error } = useMutation({
+    mutationFn: () =>
+      updateBusinessHours({
+        business_hours_enabled: enabled,
+        business_hours_timezone: timezone,
+        business_hours: schedule,
+        away_message: awayMessage.trim(),
+      }),
+    onSuccess: (updatedOrg) => {
+      if (token && user) setAuth(token, { ...user, organization: updatedOrg })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2_000)
+    },
+  })
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">Business hours</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Outside these hours the widget shows your away message and asks visitors for an email so you can reply later.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Enable business hours"
+          onClick={() => setEnabled((v) => !v)}
+          className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 ${
+            enabled ? 'bg-brand-500' : 'bg-zinc-200'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+              enabled ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      <fieldset disabled={!enabled} className={`flex flex-col gap-4 transition-opacity ${enabled ? '' : 'opacity-50'}`}>
+        <label className="text-xs font-medium text-zinc-700 flex flex-col gap-1.5">
+          Timezone
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition bg-white"
+          >
+            {timezoneOptions(timezone).map((tz) => (
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-col gap-2">
+          {schedule.map((day, i) => (
+            <div key={WEEKDAYS[i]} className="flex items-center gap-3">
+              <label className="w-28 flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={day.enabled}
+                  onChange={(e) => updateDay(i, { enabled: e.target.checked })}
+                  className="rounded border-zinc-300 text-brand-500 focus:ring-brand-100"
+                />
+                {WEEKDAYS[i].slice(0, 3)}
+              </label>
+              {day.enabled ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <input
+                    type="time"
+                    value={day.start}
+                    onChange={(e) => updateDay(i, { start: e.target.value })}
+                    className="rounded-lg border border-zinc-200 px-2 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
+                  />
+                  <span className="text-zinc-400">–</span>
+                  <input
+                    type="time"
+                    value={day.end}
+                    onChange={(e) => updateDay(i, { end: e.target.value })}
+                    className={`rounded-lg border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-100 transition ${
+                      day.end <= day.start ? 'border-red-300' : 'border-zinc-200 focus:border-brand-500'
+                    }`}
+                  />
+                </div>
+              ) : (
+                <span className="text-sm text-zinc-400">Closed</span>
+              )}
+            </div>
+          ))}
+          {invalidDay && <p className="text-xs text-red-500">Closing time must be after opening time.</p>}
+        </div>
+
+        <label className="text-xs font-medium text-zinc-700 flex flex-col gap-1.5">
+          Away message
+          <textarea
+            value={awayMessage}
+            onChange={(e) => setAwayMessage(e.target.value)}
+            rows={2}
+            maxLength={280}
+            placeholder="We're away right now. Leave a message and we'll get back to you by email."
+            className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-none"
+          />
+        </label>
+      </fieldset>
+
+      {error && <p className="text-xs text-red-500">Couldn't save business hours. Please try again.</p>}
+
+      <button
+        onClick={() => save()}
+        disabled={saving || !awayMessage.trim() || invalidDay}
         className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
           saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
         }`}
