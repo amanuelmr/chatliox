@@ -54,6 +54,15 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         ARRAY(String(50)), nullable=False, default=list, server_default="{}"
     )
 
+    # When the visitor last had the chat open, and when we last emailed them
+    # replies they missed — together these decide which replies still need emailing.
+    visitor_last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    visitor_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # 1-5, set by the visitor after a conversation is resolved.
     csat_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

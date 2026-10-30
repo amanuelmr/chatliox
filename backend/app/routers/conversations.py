@@ -23,6 +23,7 @@ from app.services.conversation import (
     get_conversations,
     mark_visitor_messages_read,
     submit_csat,
+    touch_visitor_last_seen,
     update_conversation_status,
     update_conversation_tags,
 )
@@ -175,5 +176,6 @@ async def list_visitor_messages(
     conv = await get_conversation(db, conversation_id)
     if not conv or str(conv.visitor_id) != visitor_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    await touch_visitor_last_seen(db, conversation_id)
     messages = await get_messages(db, conversation_id)
     return [m for m in messages if not m.is_internal]

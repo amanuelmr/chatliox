@@ -168,6 +168,15 @@ async def get_stale_waiting_conversations(
     return list(result.scalars().all())
 
 
+async def touch_visitor_last_seen(db: AsyncSession, conversation_id: uuid.UUID) -> None:
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(visitor_last_seen_at=func.now())
+    )
+    await db.commit()
+
+
 async def mark_waiting_alert_sent(db: AsyncSession, conversation_id: uuid.UUID) -> None:
     conv = await db.get(Conversation, conversation_id)
     if conv is not None:
