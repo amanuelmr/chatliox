@@ -1,13 +1,24 @@
+import logging
+import re
 from html import escape
 
 import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
 async def _send(to_email: str, subject: str, html_body: str) -> None:
+    # Local stacks usually have no Resend key; log the email (and its links, e.g.
+    # the verification URL) so sign-up still works end to end.
+    if not settings.RESEND_API_KEY and settings.ENVIRONMENT == "development":
+        links = sorted(set(re.findall(r'href="([^"]+)"', html_body)))
+        logger.warning("Email not sent (no RESEND_API_KEY) to=%s subject=%r links=%s", to_email, subject, links)
+        return
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(
             RESEND_API_URL,
