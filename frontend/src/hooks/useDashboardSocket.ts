@@ -1,18 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { apiWsUrl } from '@/lib/ws'
 import type { Conversation } from '@/types/chat'
 
 type DashboardEvent =
   | ({ type: 'conversation_created' | 'conversation_updated' } & Conversation)
   | { type: string }
-
-function wsUrl(path: string, token: string): string {
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = import.meta.env.DEV
-    ? window.location.host
-    : (import.meta.env.VITE_API_URL as string).replace(/^https?:\/\//, '')
-  return `${proto}//${host}${path}?token=${token}`
-}
 
 // Keeps the dashboard conversation list live: upserts conversations into the
 // ['conversations'] query cache as they're created or updated, so the list
@@ -28,7 +21,7 @@ export function useDashboardSocket(token: string | null) {
     let retry: ReturnType<typeof setTimeout> | null = null
 
     const connect = () => {
-      const ws = new WebSocket(wsUrl('/ws/dashboard', token))
+      const ws = new WebSocket(apiWsUrl(`/ws/dashboard?token=${token}`))
       wsRef.current = ws
 
       ws.onmessage = ({ data }: MessageEvent) => {

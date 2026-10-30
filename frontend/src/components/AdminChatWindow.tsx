@@ -7,6 +7,7 @@ import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import Spinner from '@/components/Spinner'
+import { apiWsUrl } from '@/lib/ws'
 import type { Conversation, ConversationStatus, Message, WsEvent } from '@/types/chat'
 
 type InputMode = 'reply' | 'note'
@@ -68,11 +69,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
 
     const connect = () => {
       wsRef.current?.close()
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const host = import.meta.env.DEV
-        ? window.location.host
-        : (import.meta.env.VITE_API_URL as string).replace(/^https?:\/\//, '')
-      const ws = new WebSocket(`${proto}//${host}/ws/conversations/${conversationId}?token=${token ?? ''}`)
+      const ws = new WebSocket(apiWsUrl(`/ws/conversations/${conversationId}?token=${token ?? ''}`))
       wsRef.current = ws
       ws.onopen = () => setConnected(true)
       ws.onmessage = ({ data }: MessageEvent) => {
