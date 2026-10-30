@@ -2,17 +2,21 @@ import { useState } from 'react'
 import Logo from '@/components/Logo'
 import Spinner from '@/components/Spinner'
 import { resendVerification } from '@/api/auth'
+import { apiErrorMessage } from '@/lib/apiError'
 import { useAuthStore } from '@/store/authStore'
 
 export default function VerifyGate({ email }: { email: string }) {
   const logout = useAuthStore((s) => s.logout)
   const [sent, setSent] = useState(false)
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleResend = () => {
     setSending(true)
+    setError(null)
     resendVerification(email)
       .then(() => setSent(true))
+      .catch((err) => setError(apiErrorMessage(err, "We couldn't resend the email. Please try again.")))
       .finally(() => setSending(false))
   }
 
@@ -49,6 +53,10 @@ export default function VerifyGate({ email }: { email: string }) {
                 </span>
               ) : 'Resend email'}
             </button>
+          )}
+
+          {error && (
+            <p className="mt-3 text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
           )}
 
           <button

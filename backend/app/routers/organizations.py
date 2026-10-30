@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user, require_admin, require_email_configured
 from app.core.email import send_invite_email
 from app.models.user import User, UserRole
 from app.schemas.user import MemberResponse, OrganizationInfo
@@ -116,7 +116,11 @@ class SendInviteRequest(BaseModel):
     email: EmailStr
 
 
-@router.post("/invite/send-email", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/invite/send-email",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_email_configured)],
+)
 async def send_invite(
     body: SendInviteRequest,
     db: AsyncSession = Depends(get_db),

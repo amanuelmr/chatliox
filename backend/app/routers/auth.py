@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_email_configured
 from app.core.email import send_password_reset_email, send_verification_email
 from app.core.limiter import limiter
 from app.core.security import create_access_token, verify_password
@@ -62,7 +62,13 @@ async def _send_password_reset(db: AsyncSession, user: User) -> None:
         logger.exception("Failed to send password reset email to %s: %s", user.email, exc)
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    # New accounts can't be verified without email, so refuse before creating one.
+    dependencies=[Depends(require_email_configured)],
+)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     if await get_user_by_email(db, body.email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
@@ -119,7 +125,11 @@ async def verify_email(body: VerifyEmailRequest, db: AsyncSession = Depends(get_
     return TokenResponse(access_token=create_access_token(str(user.id)))
 
 
-@router.post("/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/resend-verification",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_email_configured)],
+)
 @limiter.limit("5/minute")
 async def resend_verification(
     request: Request, body: ResendVerificationRequest, db: AsyncSession = Depends(get_db)
@@ -130,7 +140,11 @@ async def resend_verification(
     # Always return the same response — don't reveal whether the address exists or is verified.
 
 
-@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_email_configured)],
+)
 @limiter.limit("5/minute")
 async def forgot_password(
     request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)

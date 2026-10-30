@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { forgotPassword } from '@/api/auth'
+import { apiErrorMessage } from '@/lib/apiError'
 import Logo from '@/components/Logo'
 import Spinner from '@/components/Spinner'
 
@@ -8,15 +9,20 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
     try {
+      // The API answers the same way whether or not the address is registered,
+      // so an error here is a real failure (e.g. email not set up), not "unknown account".
       await forgotPassword(email)
-    } finally {
-      // Always show the same confirmation — don't reveal whether the address is registered.
       setSent(true)
+    } catch (err) {
+      setError(apiErrorMessage(err, "We couldn't send the reset email. Please try again."))
+    } finally {
       setLoading(false)
     }
   }
@@ -65,6 +71,12 @@ export default function ForgotPasswordPage() {
                 placeholder="you@company.com"
               />
             </div>
+
+            {error && (
+              <p className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"

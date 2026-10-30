@@ -1,0 +1,58 @@
+# Local development stack: Postgres, the API with hot reload, and the Vite dev server.
+#   docker compose up --build
+# Dashboard: http://localhost:5173  ·  API: http://localhost:8000
+# Ports clash with something else? API_PORT=8010 WEB_PORT=5174 docker compose up
+# Database shell: docker compose exec db psql -U chatliox
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chatliox
+      POSTGRES_PASSWORD: chatliox
+      POSTGRES_DB: chatliox
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatliox"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chatliox:chatliox@db:5432/chatliox
+      SECRET_KEY: local-dev-secret
+      ENVIRONMENT: development
+      ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-5173}
+      # Needed for sign-up, password reset and invites; export it before `docker compose up`.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:${API_PORT:-8000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # Keep the container's Linux node_modules separate from the host's.
+      - web-node-modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+  web-node-modules:

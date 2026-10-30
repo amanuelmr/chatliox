@@ -7,7 +7,18 @@ from app.core.config import settings
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
+class EmailNotConfiguredError(RuntimeError):
+    """An email was requested but RESEND_API_KEY isn't set."""
+
+
+def email_configured() -> bool:
+    return bool(settings.RESEND_API_KEY)
+
+
 async def _send(to_email: str, subject: str, html_body: str) -> None:
+    if not email_configured():
+        raise EmailNotConfiguredError("RESEND_API_KEY is not set")
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(
             RESEND_API_URL,
