@@ -27,6 +27,7 @@ The project includes:
 - Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
 - An analytics view with volume, first response time, and per-agent stats
 - Visitor CSAT ratings on resolved conversations
+- Missed-reply emails: if a visitor who left their email closes the chat before an agent answers, the replies are emailed to them
 - Business hours with an away mode: outside the weekly schedule the widget shows an away message and asks visitors for an email
 - Email verification for new accounts, sent via Resend
 - Self-service password reset via an emailed, expiring link
@@ -121,7 +122,8 @@ Set these in `backend/.env`:
 | `RESEND_API_KEY` | API key for [Resend](https://resend.com), used to send verification, invite, and alert emails |
 | `EMAIL_FROM` | Sender address for outgoing email, e.g. `Chatliox <notifications@yourdomain.com>` — the domain must be verified in Resend |
 | `UNANSWERED_ALERT_MINUTES` | Minutes a conversation can sit unanswered before the team gets an email alert |
-| `UNANSWERED_ALERT_POLL_SECONDS` | How often the backend checks for unanswered conversations |
+| `UNANSWERED_ALERT_POLL_SECONDS` | How often the backend checks for unanswered conversations and missed replies |
+| `MISSED_REPLY_EMAIL_MINUTES` | Minutes an agent reply can go unseen before it's emailed to a visitor who left their email |
 
 ### Frontend
 
