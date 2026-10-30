@@ -5,8 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.core.email import send_unanswered_alert_email
-from app.services.conversation import get_stale_waiting_conversations, mark_waiting_alert_sent
+from app.core.email import send_missed_replies_email, send_unanswered_alert_email
+from app.core.ws_manager import manager as ws_manager
+from app.services.conversation import (
+    get_conversations_with_missed_replies,
+    get_stale_waiting_conversations,
+    mark_visitor_notified,
+    mark_waiting_alert_sent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +50,38 @@ async def run_unanswered_alert_sweep(db: AsyncSession) -> None:
         await mark_waiting_alert_sent(db, conv.id)
 
 
-async def unanswered_alert_loop() -> None:
-    while True:
+async def run_missed_reply_sweep(db: AsyncSession) -> None:
+    if not settings.RESEND_API_KEY:
+        return
+
+    pending = await get_conversations_with_missed_replies(db, settings.MISSED_REPLY_EMAIL_MINUTES)
+    for conv, replies in pending:
+        # Still on the page — they'll see the replies live.
+        if ws_manager.is_visitor_connected(str(conv.id)):
+            continue
+
+        lines = [
+            (
+                m.sender_name or conv.organization.name,
+                f"Sent a file: {m.attachment_name}" if m.attachment_url else m.content,
+            )
+            for m in replies
+        ]
         try:
-            async with AsyncSessionLocal() as db:
-                await run_unanswered_alert_sweep(db)
+            await send_missed_replies_email(conv.visitor_email, conv.organization.name, lines)
         except Exception:
-            logger.exception("Unanswered-conversation alert sweep failed")
+            logger.exception("Failed to email missed replies for %s", conv.id)
+            continue
+
+        await mark_visitor_notified(db, conv.id)
+
+
+async def email_notification_loop() -> None:
+    while True:
+        for sweep in (run_unanswered_alert_sweep, run_missed_reply_sweep):
+            try:
+                async with AsyncSessionLocal() as db:
+                    await sweep(db)
+            except Exception:
+                logger.exception("%s failed", sweep.__name__)
         await asyncio.sleep(settings.UNANSWERED_ALERT_POLL_SECONDS)

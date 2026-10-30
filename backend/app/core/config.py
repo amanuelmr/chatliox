@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     UNANSWERED_ALERT_MINUTES: int = 5
     UNANSWERED_ALERT_POLL_SECONDS: int = 60
 
+    # How long an agent reply can go unseen before it's emailed to the visitor.
+    MISSED_REPLY_EMAIL_MINUTES: int = 2
+
     @property
     def origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
