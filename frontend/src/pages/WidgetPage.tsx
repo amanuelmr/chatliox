@@ -309,7 +309,7 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, 
         />
         <input
           type="email"
-          placeholder={isOnline ? 'Your email (optional)' : 'Your email'}
+          placeholder={isOnline ? 'Your email (optional, to get replies if you leave)' : 'Your email'}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required={!isOnline}

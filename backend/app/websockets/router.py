@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.core.ws_manager import manager
-from app.services.conversation import get_conversation
+from app.services.conversation import get_conversation, touch_visitor_last_seen
 from app.services.user import get_user_by_id
 
 router = APIRouter()
@@ -133,7 +133,11 @@ async def conversation_ws(
         return
 
     # ── 3. Join room and announce presence ────────────────────────────────────
+    is_visitor = token is None
     manager.add_connection(conversation_id, websocket)
+    if is_visitor:
+        manager.visitor_connected(conversation_id)
+        await touch_visitor_last_seen(db, conv_uuid)
     await manager.broadcast_except(
         conversation_id,
         {"type": "presence", "user_id": effective_user_id, "status": "online"},
@@ -164,6 +168,10 @@ async def conversation_ws(
         pass
     finally:
         manager.disconnect(conversation_id, websocket)
+        if is_visitor:
+            manager.visitor_disconnected(conversation_id)
+            # Everything sent up to now was delivered live, so it isn't "missed".
+            await touch_visitor_last_seen(db, conv_uuid)
         await manager.broadcast(
             conversation_id,
             {"type": "presence", "user_id": effective_user_id, "status": "offline"},

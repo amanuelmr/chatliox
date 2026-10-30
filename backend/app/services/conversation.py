@@ -168,6 +168,54 @@ async def get_stale_waiting_conversations(
     return list(result.scalars().all())
 
 
+async def touch_visitor_last_seen(db: AsyncSession, conversation_id: uuid.UUID) -> None:
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(visitor_last_seen_at=func.now())
+    )
+    await db.commit()
+
+
+async def get_conversations_with_missed_replies(
+    db: AsyncSession, older_than_minutes: int
+) -> list[tuple[Conversation, list[Message]]]:
+    """Conversations with an email on file whose visitor hasn't seen, and hasn't
+    been emailed, agent replies older than the threshold — paired with those replies."""
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=older_than_minutes)
+    unseen_since = func.greatest(
+        func.coalesce(Conversation.visitor_last_seen_at, Conversation.created_at),
+        func.coalesce(Conversation.visitor_notified_at, Conversation.created_at),
+    )
+    q = (
+        select(Conversation, Message)
+        .join(Message, Message.conversation_id == Conversation.id)
+        .where(Conversation.visitor_email.is_not(None))
+        .where(Message.sender_type == SenderType.ADMIN)
+        .where(Message.is_internal.is_(False))
+        .where(Message.created_at > unseen_since)
+        .options(selectinload(Conversation.organization), selectinload(Message.sender))
+        .order_by(Conversation.id, Message.created_at)
+    )
+    result = await db.execute(q)
+
+    grouped: dict[uuid.UUID, tuple[Conversation, list[Message]]] = {}
+    for conv, message in result.all():
+        grouped.setdefault(conv.id, (conv, []))[1].append(message)
+    # Wait until the newest reply has aged past the threshold, so a burst of
+    # replies goes out as one email instead of one per message.
+    return [(conv, msgs) for conv, msgs in grouped.values() if msgs[-1].created_at < threshold]
+
+
+async def mark_visitor_notified(db: AsyncSession, conversation_id: uuid.UUID) -> None:
+    await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(visitor_notified_at=func.now())
+    )
+    await db.commit()
+
+
 async def mark_waiting_alert_sent(db: AsyncSession, conversation_id: uuid.UUID) -> None:
     conv = await db.get(Conversation, conversation_id)
     if conv is not None:

@@ -11,14 +11,14 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.routers import analytics, auth, canned_responses, conversations, health, messages, organizations
-from app.services.alerts import unanswered_alert_loop
+from app.services.alerts import email_notification_loop
 from app.services.storage import MEDIA_ROOT
 from app.websockets import router as ws_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(unanswered_alert_loop())
+    task = asyncio.create_task(email_notification_loop())
     try:
         yield
     finally:
