@@ -118,6 +118,17 @@ npm install
 npm run dev
 ```
 
+### Tests
+
+The backend tests run against a real Postgres. Point `DATABASE_URL` at an empty database, then:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+alembic upgrade head
+pytest
+```
+
 ## Environment Variables
 
 ### Backend
