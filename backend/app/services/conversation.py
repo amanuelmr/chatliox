@@ -139,7 +139,9 @@ async def submit_csat(
     visitor_id: str,
     rating: int,
 ) -> Conversation | None:
-    conv = await db.get(Conversation, conversation_id)
+    # Load the assignee too: the response includes their name, and a lazy load
+    # isn't possible once we're serializing outside the session's async context.
+    conv = await get_conversation_with_assignee(db, conversation_id)
     if conv is None or str(conv.visitor_id) != visitor_id:
         return None
     conv.csat_rating = rating
