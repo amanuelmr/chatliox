@@ -129,6 +129,8 @@ alembic upgrade head
 pytest
 ```
 
+CI runs these tests, the frontend build and the API Docker build on every pull request.
+
 ## Environment Variables
 
 ### Backend
