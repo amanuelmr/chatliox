@@ -30,6 +30,7 @@ The project includes:
 - Missed-reply emails: if a visitor who left their email closes the chat before an agent answers, the replies are emailed to them
 - Business hours with an away mode: outside the weekly schedule the widget shows an away message and asks visitors for an email
 - A pre-chat form: choose whether name and email are asked for or required, and add up to five custom questions whose answers show beside the conversation
+- Chat transcripts: visitors can email themselves a copy from the widget, and agents can send one from the inbox. Internal notes are never included
 - Email verification for new accounts, sent via Resend
 - Self-service password reset via an emailed, expiring link
 
