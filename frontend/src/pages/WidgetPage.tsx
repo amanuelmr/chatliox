@@ -9,10 +9,16 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
-import { createConversation, getVisitorConversationStatus, submitCsat } from '@/api/conversations'
+import {
+  createConversation,
+  emailVisitorTranscript,
+  getVisitorConversationStatus,
+  submitCsat,
+} from '@/api/conversations'
 import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
+import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
@@ -655,6 +661,14 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
 
       {convStatus === 'closed' && <CsatPrompt conversationId={conversationId} visitorId={visitorId} />}
 
+      {messages.length > 0 && (
+        <TranscriptRequest
+          conversationId={conversationId}
+          visitorId={visitorId}
+          hasEmail={statusData?.has_email ?? false}
+        />
+      )}
+
       {sendError && (
         <div className="px-4 pb-1 bg-white">
           <p className="text-xs text-red-500">{widgetErrorMessage(sendError)}</p>
@@ -757,6 +771,95 @@ function CsatPrompt({ conversationId, visitorId }: { conversationId: string; vis
         ))}
       </div>
     </div>
+  )
+}
+
+// ─── Transcript request ───────────────────────────────────────────────────────
+
+function TranscriptRequest({
+  conversationId,
+  visitorId,
+  hasEmail,
+}: {
+  conversationId: string
+  visitorId: string
+  hasEmail: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [asking, setAsking] = useState(false)
+  const [email, setEmail] = useState('')
+
+  const { mutate: request, isPending, isSuccess, error, reset } = useMutation({
+    mutationFn: () => emailVisitorTranscript(conversationId, visitorId, hasEmail ? undefined : email.trim()),
+    // A newly added email is now on the conversation.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['widget-conv-status', conversationId] }),
+  })
+
+  if (isSuccess) {
+    return <p className="mx-3 mb-2 text-center text-xs text-zinc-400">Transcript sent to your email.</p>
+  }
+
+  const errorText =
+    error && (axios.isAxiosError(error) && error.response?.status === 429
+      ? widgetErrorMessage(error)
+      : apiErrorMessage(error, widgetErrorMessage(error)))
+
+  if (!asking) {
+    return (
+      <div className="mx-3 mb-2 text-center">
+        <button
+          type="button"
+          // With an email on file there's nothing to ask, so send straight away.
+          onClick={() => (hasEmail ? request() : setAsking(true))}
+          disabled={isPending}
+          className="text-xs text-zinc-400 hover:text-zinc-600 underline-offset-2 hover:underline disabled:opacity-50 transition-colors"
+        >
+          {isPending ? 'Sending…' : 'Email me a transcript'}
+        </button>
+        {errorText && <p className="text-xs text-red-500 mt-1">{errorText}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        request()
+      }}
+      className="mx-3 mb-2 flex flex-col gap-1.5"
+    >
+      <div className="flex gap-1.5">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value)
+            reset()
+          }}
+          placeholder="Your email"
+          aria-label="Your email"
+          autoFocus
+          className="flex-1 min-w-0 bg-zinc-50 rounded-lg px-3 py-1.5 text-xs text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+        />
+        <button
+          type="submit"
+          disabled={isPending || !EMAIL_PATTERN.test(email.trim())}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-zinc-900 text-white disabled:opacity-40 transition-opacity"
+        >
+          {isPending ? 'Sending…' : 'Send'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAsking(false)}
+          aria-label="Cancel"
+          className="text-zinc-400 hover:text-zinc-600 px-1 transition-colors"
+        >
+          ×
+        </button>
+      </div>
+      {errorText && <p className="text-xs text-red-500">{errorText}</p>}
+    </form>
   )
 }
 

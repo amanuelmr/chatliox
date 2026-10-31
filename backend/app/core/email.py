@@ -160,3 +160,34 @@ async def send_missed_replies_email(
     </div>
     """
     await _send(to_email, subject, html_body)
+
+
+async def send_transcript_email(
+    to_email: str, org_name: str, started: str, lines: list[tuple[str, str, str]]
+) -> None:
+    """lines: (sender name, time, message text), oldest first. Message text is
+    untrusted, so everything interpolated here is HTML-escaped."""
+    org = escape(org_name)
+    subject = f"Your conversation with {org_name}"
+    items = "".join(
+        f"""
+      <div style="margin:0 0 16px">
+        <p style="font-size:12px;color:#6b7280;margin:0 0 4px">
+          <strong style="color:#374151">{escape(sender)}</strong> · {escape(sent_at)}
+        </p>
+        <p style="font-size:14px;color:#111827;margin:0;line-height:1.6;white-space:pre-wrap">{escape(text)}</p>
+      </div>"""
+        for sender, sent_at, text in lines
+    )
+    html_body = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+      <h2 style="font-size:20px;font-weight:600;color:#111827;margin:0 0 8px">
+        Your conversation with {org}
+      </h2>
+      <p style="font-size:14px;color:#6b7280;margin:0 0 24px;line-height:1.6">
+        Started {escape(started)}. Here's a copy for your records.
+      </p>
+      {items}
+    </div>
+    """
+    await _send(to_email, subject, html_body)

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getCannedResponses } from '@/api/cannedResponses'
-import { getConversations, updateConversationStatus, updateConversationTags } from '@/api/conversations'
+import { emailTranscript, getConversations, updateConversationStatus, updateConversationTags } from '@/api/conversations'
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import Spinner from '@/components/Spinner'
+import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
 import type { Conversation, ConversationStatus, Message, WsEvent } from '@/types/chat'
 
@@ -144,6 +145,17 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
       setContent(vars.content)
     },
   })
+
+  const {
+    mutate: sendTranscript,
+    isPending: sendingTranscript,
+    isSuccess: transcriptSent,
+    error: transcriptError,
+    reset: resetTranscript,
+  } = useMutation({ mutationFn: () => emailTranscript(conversationId) })
+
+  // Each conversation starts with a fresh "Email transcript" action.
+  useEffect(() => resetTranscript(), [conversationId, resetTranscript])
 
   const { mutate: resolve, isPending: resolving } = useMutation({
     mutationFn: () => updateConversationStatus(conversationId, 'closed'),
@@ -458,6 +470,21 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             <ActionBtn onClick={() => setMode('note')} icon="✎">
               Add internal note
             </ActionBtn>
+            <ActionBtn
+              onClick={() => sendTranscript()}
+              disabled={!conv?.visitor_email || sendingTranscript || transcriptSent}
+              icon="✉"
+            >
+              {sendingTranscript ? 'Sending transcript…' : transcriptSent ? 'Transcript sent' : 'Email transcript to visitor'}
+            </ActionBtn>
+            {!conv?.visitor_email && (
+              <p className="px-3 pb-1 text-[11px] text-zinc-400">The visitor didn't leave an email.</p>
+            )}
+            {transcriptError && (
+              <p className="px-3 pb-1 text-[11px] text-red-500">
+                {apiErrorMessage(transcriptError, "Couldn't send the transcript. Please try again.")}
+              </p>
+            )}
           </div>
         </div>
       </aside>

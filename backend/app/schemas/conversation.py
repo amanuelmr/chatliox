@@ -31,6 +31,12 @@ class SubmitCsatRequest(BaseModel):
     rating: int = Field(ge=1, le=5)
 
 
+class VisitorTranscriptRequest(BaseModel):
+    visitor_id: str
+    # Only needed when the visitor didn't leave an email when starting the chat.
+    email: EmailStr | None = None
+
+
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

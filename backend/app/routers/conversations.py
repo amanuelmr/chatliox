@@ -1,13 +1,14 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import require_verified_user
+from app.core.deps import require_email_configured, require_verified_user
 from app.core.limiter import limiter
 from app.core.ws_manager import manager as ws_manager
-from app.models.conversation import ConversationStatus
+from app.models.conversation import Conversation, ConversationStatus
 from app.models.user import User
 from app.schemas.conversation import (
     ConversationResponse,
@@ -15,12 +16,14 @@ from app.schemas.conversation import (
     SubmitCsatRequest,
     UpdateConversationStatusRequest,
     UpdateConversationTagsRequest,
+    VisitorTranscriptRequest,
 )
 from app.schemas.message import MessageResponse
 from app.services.conversation import (
     create_conversation,
     get_conversation,
     get_conversations,
+    set_visitor_email,
     mark_visitor_messages_read,
     submit_csat,
     touch_visitor_last_seen,
@@ -29,11 +32,13 @@ from app.services.conversation import (
 )
 from app.services.business_hours import is_within_business_hours
 from app.services.message import get_messages
-from app.services.organization import get_organization_by_widget_key
+from app.services.organization import get_organization_by_id, get_organization_by_widget_key
 from app.services.pre_chat import PreChatError, collect_pre_chat_answers
+from app.services.transcript import email_transcript
 from app.websockets.router import org_room
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
@@ -171,7 +176,74 @@ async def get_visitor_status(
     conv = await get_conversation(db, conversation_id)
     if not conv or str(conv.visitor_id) != visitor_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    return {"status": conv.status.value}
+    return {"status": conv.status.value, "has_email": conv.visitor_email is not None}
+
+
+async def _send_transcript(db: AsyncSession, conv: Conversation, to_email: str) -> None:
+    org = await get_organization_by_id(db, conv.organization_id)
+    try:
+        await email_transcript(db, conv, org, to_email)
+    except Exception as exc:
+        logger.exception("Failed to email transcript for %s", conv.id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't send the transcript. Please try again.",
+        ) from exc
+
+
+@router.post(
+    "/{conversation_id}/transcript",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_email_configured)],
+)
+@limiter.limit("10/hour")
+async def send_transcript_to_visitor(
+    request: Request,
+    conversation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_verified_user),
+) -> None:
+    """An agent emails the transcript to the address the visitor left."""
+    conv = await get_conversation(db, conversation_id)
+    if not conv or conv.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if not conv.visitor_email:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This visitor didn't leave an email address",
+        )
+    await _send_transcript(db, conv, conv.visitor_email)
+
+
+@router.post(
+    "/{conversation_id}/visitor-transcript",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_email_configured)],
+)
+@limiter.limit("3/hour")
+async def send_transcript_to_self(
+    request: Request,
+    conversation_id: uuid.UUID,
+    body: VisitorTranscriptRequest,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """The visitor asks for a copy. It always goes to the email on the conversation;
+    a visitor who never left one can add it here, which also lets the team follow up."""
+    conv = await get_conversation(db, conversation_id)
+    if not conv or str(conv.visitor_id) != body.visitor_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if not conv.visitor_email:
+        if not body.email:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please enter your email",
+            )
+        conv = await set_visitor_email(db, conv, body.email)
+        await ws_manager.broadcast(
+            org_room(conv.organization_id),
+            {"type": "conversation_updated", **ConversationResponse.model_validate(conv).model_dump(mode="json")},
+        )
+    await _send_transcript(db, conv, conv.visitor_email)
 
 
 @router.get("/{conversation_id}/visitor-messages", response_model=list[MessageResponse])
