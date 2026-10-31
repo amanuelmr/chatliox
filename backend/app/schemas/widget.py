@@ -8,6 +8,8 @@ GreetingStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 IconUrl = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500, pattern=r"^https?://.+")]
 WidgetPosition = Literal["left", "right"]
 ClockTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
+FieldRequirement = Literal["hidden", "optional", "required"]
+ShortLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
 
 
 class WidgetConfigResponse(BaseModel):
@@ -24,6 +26,9 @@ class WidgetConfigResponse(BaseModel):
     widget_offset_y: int
     business_hours_enabled: bool
     away_message: str
+    pre_chat_name: FieldRequirement
+    pre_chat_email: FieldRequirement
+    pre_chat_fields: list[dict]
     # Computed per request from the org's schedule; always true when the schedule is off.
     is_online: bool = True
 
@@ -67,3 +72,36 @@ class UpdateWidgetConfigRequest(BaseModel):
     widget_height: int | None = Field(default=None, ge=400, le=800)
     widget_offset_x: int | None = Field(default=None, ge=0, le=200)
     widget_offset_y: int | None = Field(default=None, ge=0, le=200)
+
+
+class PreChatField(BaseModel):
+    # Omitted for new questions; the server assigns one.
+    id: Annotated[str, StringConstraints(pattern=r"^[a-z0-9]{1,16}$")] | None = None
+    label: ShortLabel
+    type: Literal["text", "select"]
+    options: list[ShortLabel] = Field(default_factory=list, max_length=10)
+    required: bool = False
+
+    @model_validator(mode="after")
+    def options_match_type(self) -> "PreChatField":
+        if self.type == "select":
+            if len(self.options) < 2:
+                raise ValueError("A dropdown needs at least two options")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("Dropdown options must be unique")
+        else:
+            self.options = []
+        return self
+
+
+class UpdatePreChatFormRequest(BaseModel):
+    pre_chat_name: FieldRequirement
+    pre_chat_email: FieldRequirement
+    pre_chat_fields: list[PreChatField] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def unique_labels(self) -> "UpdatePreChatFormRequest":
+        labels = [f.label.lower() for f in self.pre_chat_fields]
+        if len(set(labels)) != len(labels):
+            raise ValueError("Each question needs a different label")
+        return self

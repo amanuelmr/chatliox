@@ -30,6 +30,7 @@ from app.services.conversation import (
 from app.services.business_hours import is_within_business_hours
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_widget_key
+from app.services.pre_chat import PreChatError, collect_pre_chat_answers
 from app.websockets.router import org_room
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -54,12 +55,18 @@ async def create(
             detail="An email address is required outside business hours",
         )
 
+    try:
+        answers = collect_pre_chat_answers(org, body)
+    except PreChatError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
     conversation = await create_conversation(
         db,
         body.visitor_id,
-        body.visitor_name,
+        (body.visitor_name or "").strip() or None,
         body.visitor_email,
         org.id,
+        answers,
     )
     await ws_manager.broadcast(
         org_room(org.id),

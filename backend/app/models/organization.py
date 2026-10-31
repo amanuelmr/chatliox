@@ -56,6 +56,14 @@ class Organization(UUIDMixin, TimestampMixin, Base):
         server_default="We're away right now. Leave a message and we'll get back to you by email.",
     )
 
+    # Pre-chat form: name and email are "hidden", "optional" or "required", plus up
+    # to five custom questions: {"id", "label", "type": "text"|"select", "options", "required"}.
+    pre_chat_name: Mapped[str] = mapped_column(String(10), nullable=False, server_default="optional")
+    pre_chat_email: Mapped[str] = mapped_column(String(10), nullable=False, server_default="optional")
+    pre_chat_fields: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="organization"

@@ -16,11 +16,13 @@ async def create_conversation(
     visitor_name: str | None,
     visitor_email: str | None,
     organization_id: uuid.UUID,
+    pre_chat_answers: list[dict] | None = None,
 ) -> Conversation:
     conversation = Conversation(
         visitor_id=visitor_id,
         visitor_name=visitor_name,
         visitor_email=visitor_email,
+        pre_chat_answers=pre_chat_answers or [],
         status=ConversationStatus.WAITING,
         organization_id=organization_id,
     )

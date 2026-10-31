@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -61,6 +61,12 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     )
     visitor_notified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # The visitor's answers to the org's custom pre-chat questions, stored as
+    # [{"label", "value"}] so later edits to the form don't rewrite history.
+    pre_chat_answers: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
 
     # 1-5, set by the visitor after a conversation is resolved.

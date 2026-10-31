@@ -108,3 +108,22 @@ async def update_business_hours(
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def update_pre_chat_form(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    name_requirement: str,
+    email_requirement: str,
+    fields: list[dict],
+) -> Organization | None:
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        return None
+    org.pre_chat_name = name_requirement
+    org.pre_chat_email = email_requirement
+    org.pre_chat_fields = fields
+    await db.commit()
+    await db.refresh(org)
+    return org
