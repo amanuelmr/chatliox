@@ -1,0 +1,25 @@
+# Render Blueprint for the API. The frontend stays a static build elsewhere.
+services:
+  - type: web
+    name: chatliox-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Deploy only after the GitHub checks on the commit have passed.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      # Supabase session pooler URL with the postgresql+asyncpg:// scheme.
+      - key: DATABASE_URL
+        sync: false
+      # Frontend origin(s), comma separated. The first one is used in email links.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false

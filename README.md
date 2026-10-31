@@ -158,6 +158,18 @@ Set these in `frontend/.env`:
 |---|---|
 | `VITE_API_URL` | Base URL of the backend API used by the frontend |
 
+## Deploying the API
+
+The API runs on Render's free plan from `render.yaml`. In Render, choose **New → Blueprint**, pick this repository, and fill in the prompted values:
+
+- `DATABASE_URL`: the Supabase **session pooler** connection string (Render can't reach Supabase's IPv6-only direct host), with the scheme changed to `postgresql+asyncpg://`
+- `ALLOWED_ORIGINS`: the frontend URL, e.g. `https://chatliox.vercel.app`
+- `RESEND_API_KEY`: your Resend key
+
+Migrations run on every start, and a deploy only goes out once the CI checks on that commit have passed. Point the frontend's `VITE_API_URL` at the Render URL.
+
+Free instances sleep after 15 minutes without traffic and take about a minute to wake. To keep the API awake, have a free uptime monitor (e.g. UptimeRobot) request `/health` every 10 minutes. Uploaded files are stored on the instance's disk, which is wiped on every deploy or restart.
+
 ## Embedding the Widget
 
 After creating an account, copy the widget key from the dashboard and add one script tag to the target website, right before `</body>`:
