@@ -12,6 +12,8 @@ export interface Conversation {
   assigned_to_name: string | null
   tags: string[]
   csat_rating: number | null
+  // Answers to the org's custom pre-chat questions, as they were asked.
+  pre_chat_answers: { label: string; value: string }[]
 }
 
 export interface Message {
@@ -41,6 +43,8 @@ export interface CreateConversationRequest {
   visitor_name?: string
   visitor_email?: string
   widget_key: string
+  // Keyed by pre-chat question id.
+  pre_chat_answers?: Record<string, string>
 }
 
 export interface CreateMessageRequest {

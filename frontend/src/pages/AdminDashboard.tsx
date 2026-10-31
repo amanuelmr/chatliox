@@ -13,11 +13,20 @@ import {
   sendInviteEmail,
   updateBusinessHours,
   updateMemberRole,
+  updatePreChatForm,
   updateWidgetConfig,
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
 import { useAuthStore } from '@/store/authStore'
-import type { BusinessHoursDay, Member, User, UserRole, WidgetPosition } from '@/types/auth'
+import type {
+  BusinessHoursDay,
+  FieldRequirement,
+  Member,
+  PreChatField,
+  User,
+  UserRole,
+  WidgetPosition,
+} from '@/types/auth'
 
 type View = 'inbox' | 'analytics' | 'settings'
 
@@ -441,6 +450,9 @@ function SettingsView({
         {/* Business hours */}
         <BusinessHoursCard user={user} token={token} setAuth={setAuth} />
 
+        {/* Pre-chat form */}
+        <PreChatFormCard user={user} token={token} setAuth={setAuth} />
+
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
 
@@ -748,6 +760,208 @@ function BusinessHoursCard({
       <button
         onClick={() => save()}
         disabled={saving || !awayMessage.trim() || invalidDay}
+        className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
+          saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
+        }`}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
+      </button>
+    </div>
+  )
+}
+
+const MAX_PRE_CHAT_FIELDS = 5
+
+const REQUIREMENT_LABELS: Record<FieldRequirement, string> = {
+  hidden: "Don't ask",
+  optional: 'Optional',
+  required: 'Required',
+}
+
+// Editing state for one question. `key` keeps React rows stable before the API
+// has assigned an id, and options are edited as the comma-separated text typed.
+interface DraftField {
+  key: string
+  id?: string
+  label: string
+  type: PreChatField['type']
+  optionsText: string
+  required: boolean
+}
+
+const toDraft = (field: PreChatField): DraftField => ({
+  key: field.id,
+  id: field.id,
+  label: field.label,
+  type: field.type,
+  optionsText: field.options.join(', '),
+  required: field.required,
+})
+
+const parseOptions = (text: string) =>
+  text.split(',').map((o) => o.trim()).filter(Boolean)
+
+function draftProblem(fields: DraftField[]): string | null {
+  const labels = fields.map((f) => f.label.trim().toLowerCase())
+  if (labels.some((l) => !l)) return 'Every question needs a label.'
+  if (new Set(labels).size !== labels.length) return 'Each question needs a different label.'
+  for (const f of fields) {
+    if (f.type !== 'select') continue
+    const options = parseOptions(f.optionsText)
+    if (options.length < 2) return `"${f.label.trim()}" needs at least two options.`
+    if (new Set(options).size !== options.length) return `"${f.label.trim()}" has a repeated option.`
+  }
+  return null
+}
+
+function PreChatFormCard({
+  user,
+  token,
+  setAuth,
+}: {
+  user: User | null
+  token: string | null
+  setAuth: (token: string, user: User) => void
+}) {
+  const org = user?.organization
+  const [nameRequirement, setNameRequirement] = useState<FieldRequirement>(org?.pre_chat_name ?? 'optional')
+  const [emailRequirement, setEmailRequirement] = useState<FieldRequirement>(org?.pre_chat_email ?? 'optional')
+  const [fields, setFields] = useState<DraftField[]>(() => (org?.pre_chat_fields ?? []).map(toDraft))
+  const [saved, setSaved] = useState(false)
+
+  const updateField = (key: string, patch: Partial<DraftField>) =>
+    setFields((list) => list.map((f) => (f.key === key ? { ...f, ...patch } : f)))
+
+  const addField = () =>
+    setFields((list) => [
+      ...list,
+      { key: crypto.randomUUID(), label: '', type: 'text', optionsText: '', required: false },
+    ])
+
+  const problem = draftProblem(fields)
+
+  const { mutate: save, isPending: saving, error } = useMutation({
+    mutationFn: () =>
+      updatePreChatForm({
+        pre_chat_name: nameRequirement,
+        pre_chat_email: emailRequirement,
+        pre_chat_fields: fields.map((f) => ({
+          id: f.id,
+          label: f.label.trim(),
+          type: f.type,
+          options: f.type === 'select' ? parseOptions(f.optionsText) : [],
+          required: f.required,
+        })),
+      }),
+    onSuccess: (updatedOrg) => {
+      if (token && user) setAuth(token, { ...user, organization: updatedOrg })
+      setFields(updatedOrg.pre_chat_fields.map(toDraft))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2_000)
+    },
+  })
+
+  const inputClass =
+    'rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition bg-white'
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
+      <div>
+        <p className="text-sm font-semibold text-zinc-900">Pre-chat form</p>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          What visitors fill in before their first message. Answers show next to the conversation in the inbox.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {([
+          ['Name', nameRequirement, setNameRequirement],
+          ['Email', emailRequirement, setEmailRequirement],
+        ] as const).map(([label, value, setValue]) => (
+          <label key={label} className="text-xs font-medium text-zinc-700 flex flex-col gap-1.5">
+            {label}
+            <select value={value} onChange={(e) => setValue(e.target.value as FieldRequirement)} className={inputClass}>
+              {(Object.keys(REQUIREMENT_LABELS) as FieldRequirement[]).map((r) => (
+                <option key={r} value={r}>{REQUIREMENT_LABELS[r]}</option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+      {emailRequirement !== 'required' && (
+        <p className="text-xs text-zinc-400 -mt-2">Email is always required outside business hours.</p>
+      )}
+
+      {fields.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {fields.map((f) => (
+            <div key={f.key} className="rounded-lg ring-1 ring-zinc-200 p-3 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  value={f.label}
+                  onChange={(e) => updateField(f.key, { label: e.target.value })}
+                  maxLength={60}
+                  placeholder="Question, e.g. Order number"
+                  aria-label="Question label"
+                  className={`${inputClass} flex-1 min-w-0`}
+                />
+                <select
+                  value={f.type}
+                  onChange={(e) => updateField(f.key, { type: e.target.value as DraftField['type'] })}
+                  aria-label="Answer type"
+                  className={inputClass}
+                >
+                  <option value="text">Short answer</option>
+                  <option value="select">Dropdown</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setFields((list) => list.filter((x) => x.key !== f.key))}
+                  aria-label={`Remove ${f.label || 'question'}`}
+                  className="text-zinc-400 hover:text-red-500 px-1.5 text-lg leading-none transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              {f.type === 'select' && (
+                <input
+                  value={f.optionsText}
+                  onChange={(e) => updateField(f.key, { optionsText: e.target.value })}
+                  placeholder="Options, separated by commas"
+                  aria-label="Dropdown options"
+                  className={inputClass}
+                />
+              )}
+              <label className="flex items-center gap-2 text-xs text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={f.required}
+                  onChange={(e) => updateField(f.key, { required: e.target.checked })}
+                  className="rounded border-zinc-300 text-brand-500 focus:ring-brand-100"
+                />
+                Required
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {fields.length < MAX_PRE_CHAT_FIELDS && (
+        <button
+          type="button"
+          onClick={addField}
+          className="self-start text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
+        >
+          + Add question
+        </button>
+      )}
+
+      {problem && <p className="text-xs text-red-500">{problem}</p>}
+      {error && <p className="text-xs text-red-500">Couldn't save the pre-chat form. Please try again.</p>}
+
+      <button
+        onClick={() => save()}
+        disabled={saving || problem !== null}
         className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
           saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
         }`}

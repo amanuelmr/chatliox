@@ -10,12 +10,19 @@ from app.core.deps import get_current_user, require_admin, require_email_configu
 from app.core.email import send_invite_email
 from app.models.user import User, UserRole
 from app.schemas.user import MemberResponse, OrganizationInfo
-from app.schemas.widget import UpdateBusinessHoursRequest, UpdateWidgetConfigRequest, WidgetConfigResponse
+from app.schemas.widget import (
+    UpdateBusinessHoursRequest,
+    UpdatePreChatFormRequest,
+    UpdateWidgetConfigRequest,
+    WidgetConfigResponse,
+)
 from app.services.business_hours import is_within_business_hours
+from app.services.pre_chat import assign_field_ids
 from app.services.organization import (
     get_organization_by_widget_key,
     rotate_invite_token,
     update_business_hours,
+    update_pre_chat_form,
     update_widget_config,
 )
 from app.services.user import get_members_by_org
@@ -181,6 +188,24 @@ async def set_business_hours(
         body.business_hours_timezone,
         [day.model_dump() for day in body.business_hours],
         body.away_message,
+    )
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+@router.put("/pre-chat-form", response_model=OrganizationInfo)
+async def set_pre_chat_form(
+    body: UpdatePreChatFormRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_pre_chat_form(
+        db,
+        current_user.organization_id,
+        body.pre_chat_name,
+        body.pre_chat_email,
+        assign_field_ids(body.pre_chat_fields),
     )
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")

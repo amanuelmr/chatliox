@@ -24,6 +24,9 @@ class OrganizationInfo(BaseModel):
     business_hours_timezone: str
     business_hours: list[dict]
     away_message: str
+    pre_chat_name: str
+    pre_chat_email: str
+    pre_chat_fields: list[dict]
 
 
 class UserResponse(BaseModel):

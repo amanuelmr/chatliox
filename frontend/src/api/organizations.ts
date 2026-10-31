@@ -1,5 +1,13 @@
 import client from './client'
-import type { BusinessHoursDay, Member, Organization, UserRole, WidgetPosition } from '@/types/auth'
+import type {
+  BusinessHoursDay,
+  FieldRequirement,
+  Member,
+  Organization,
+  PreChatField,
+  UserRole,
+  WidgetPosition,
+} from '@/types/auth'
 
 export interface WidgetConfig {
   name: string
@@ -13,6 +21,9 @@ export interface WidgetConfig {
   widget_offset_y: number
   business_hours_enabled: boolean
   away_message: string
+  pre_chat_name: FieldRequirement
+  pre_chat_email: FieldRequirement
+  pre_chat_fields: PreChatField[]
   is_online: boolean
 }
 
@@ -32,6 +43,13 @@ export interface UpdateBusinessHoursRequest {
   business_hours_timezone: string
   business_hours: BusinessHoursDay[]
   away_message: string
+}
+
+export interface UpdatePreChatFormRequest {
+  pre_chat_name: FieldRequirement
+  pre_chat_email: FieldRequirement
+  // New questions have no id yet; the API assigns one.
+  pre_chat_fields: (Omit<PreChatField, 'id'> & { id?: string })[]
 }
 
 export const rotateInviteToken = (): Promise<{ invite_token: string }> =>
@@ -57,3 +75,6 @@ export const updateWidgetConfig = (data: UpdateWidgetConfigRequest): Promise<Org
 
 export const updateBusinessHours = (data: UpdateBusinessHoursRequest): Promise<Organization> =>
   client.put<Organization>('/organizations/business-hours', data).then((r) => r.data)
+
+export const updatePreChatForm = (data: UpdatePreChatFormRequest): Promise<Organization> =>
+  client.put<Organization>('/organizations/pre-chat-form', data).then((r) => r.data)
