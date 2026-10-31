@@ -16,6 +16,7 @@ import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiWsUrl } from '@/lib/ws'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
+import type { FieldRequirement, PreChatField } from '@/types/auth'
 
 const DEFAULT_BRAND_COLOR = '#4f6ef7'
 const DEFAULT_GREETING = "Send us a message and we'll get back to you shortly."
@@ -177,6 +178,9 @@ export default function WidgetPage() {
           brandColor={brandColor}
           greeting={isOnline ? greeting : awayMessage}
           isOnline={isOnline}
+          nameRequirement={widgetConfig?.pre_chat_name ?? 'optional'}
+          emailRequirement={widgetConfig?.pre_chat_email ?? 'optional'}
+          questions={widgetConfig?.pre_chat_fields ?? []}
         />
       )}
     </div>
@@ -263,24 +267,52 @@ interface WelcomeViewProps {
   brandColor: string
   greeting: string
   isOnline: boolean
+  nameRequirement: FieldRequirement
+  emailRequirement: FieldRequirement
+  questions: PreChatField[]
 }
 
-function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, greeting, isOnline }: WelcomeViewProps) {
+const INPUT_CLASS =
+  'w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200'
+
+function WelcomeView({
+  visitorId,
+  widgetKey,
+  onConversationCreated,
+  brandColor,
+  greeting,
+  isOnline,
+  nameRequirement,
+  emailRequirement,
+  questions,
+}: WelcomeViewProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [firstMessage, setFirstMessage] = useState('')
 
   // While away, an email is required so the team can follow up (the API enforces this too).
+  const emailRequired = !isOnline || emailRequirement === 'required'
+  const showEmail = emailRequired || emailRequirement === 'optional'
+  const showName = nameRequirement !== 'hidden'
   const emailValid = EMAIL_PATTERN.test(email.trim())
-  const canSubmit = firstMessage.trim() !== '' && (isOnline ? email.trim() === '' || emailValid : emailValid)
+  const answered = (q: PreChatField) => (answers[q.id] ?? '').trim() !== ''
+  const canSubmit =
+    firstMessage.trim() !== '' &&
+    (emailRequired ? emailValid : email.trim() === '' || emailValid) &&
+    (nameRequirement !== 'required' || name.trim() !== '') &&
+    questions.every((q) => !q.required || answered(q))
 
   const { mutate: startChat, isPending, error: startError } = useMutation({
     mutationFn: async () => {
       const conv = await createConversation({
         visitor_id: visitorId,
-        visitor_name: name.trim() || undefined,
-        visitor_email: email.trim() || undefined,
+        visitor_name: (showName && name.trim()) || undefined,
+        visitor_email: (showEmail && email.trim()) || undefined,
         widget_key: widgetKey,
+        pre_chat_answers: Object.fromEntries(
+          questions.filter(answered).map((q) => [q.id, answers[q.id].trim()]),
+        ),
       })
       if (firstMessage.trim()) {
         await sendMessage({
@@ -301,27 +333,64 @@ function WelcomeView({ visitorId, widgetKey, onConversationCreated, brandColor, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
-        <input
-          type="text"
-          placeholder="Your name (optional)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
-        />
-        <input
-          type="email"
-          placeholder={isOnline ? 'Your email (optional, to get replies if you leave)' : 'Your email'}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required={!isOnline}
-          className="w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200"
-        />
+        {showName && (
+          <input
+            type="text"
+            placeholder={nameRequirement === 'required' ? 'Your name' : 'Your name (optional)'}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required={nameRequirement === 'required'}
+            className={INPUT_CLASS}
+          />
+        )}
+        {showEmail && (
+          <input
+            type="email"
+            placeholder={emailRequired ? 'Your email' : 'Your email (optional, to get replies if you leave)'}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required={emailRequired}
+            className={INPUT_CLASS}
+          />
+        )}
+        {questions.map((q) => {
+          const label = q.required ? q.label : `${q.label} (optional)`
+          const setAnswer = (value: string) => setAnswers((a) => ({ ...a, [q.id]: value }))
+          return q.type === 'select' ? (
+            <select
+              key={q.id}
+              value={answers[q.id] ?? ''}
+              onChange={(e) => setAnswer(e.target.value)}
+              required={q.required}
+              aria-label={q.label}
+              // Grey until chosen, so the label reads like the other fields' placeholders.
+              className={answered(q) ? INPUT_CLASS : INPUT_CLASS.replace('text-zinc-800', 'text-zinc-400')}
+            >
+              <option value="">{label}</option>
+              {q.options.map((o) => (
+                <option key={o} value={o} className="text-zinc-800">{o}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              key={q.id}
+              type="text"
+              placeholder={label}
+              value={answers[q.id] ?? ''}
+              onChange={(e) => setAnswer(e.target.value)}
+              required={q.required}
+              maxLength={500}
+              aria-label={q.label}
+              className={INPUT_CLASS}
+            />
+          )
+        })}
         <textarea
           placeholder="How can we help you?"
           value={firstMessage}
           onChange={(e) => setFirstMessage(e.target.value)}
           rows={4}
-          className="w-full bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200 resize-none"
+          className={`${INPUT_CLASS} resize-none`}
         />
 
         {startError && (

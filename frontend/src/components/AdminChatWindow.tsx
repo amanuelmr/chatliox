@@ -385,6 +385,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             </div>
 
             <Field label="Email" value={conv?.visitor_email ?? '—'} />
+            {conv?.pre_chat_answers.map((answer) => (
+              <Field key={answer.label} label={answer.label} value={answer.value} />
+            ))}
             <Field label="Visitor ID" value={conv?.visitor_id ?? '—'} mono clip />
             <Field label="Started" value={conv ? fmtDate(conv.created_at) : '—'} />
             <Field label="Status" value={

@@ -7,6 +7,17 @@ export interface BusinessHoursDay {
   end: string
 }
 
+export type FieldRequirement = 'hidden' | 'optional' | 'required'
+
+// A custom question visitors answer before the chat starts.
+export interface PreChatField {
+  id: string
+  label: string
+  type: 'text' | 'select'
+  options: string[]
+  required: boolean
+}
+
 export interface Organization {
   name: string
   widget_key: string
@@ -23,6 +34,9 @@ export interface Organization {
   business_hours_timezone: string
   business_hours: BusinessHoursDay[]
   away_message: string
+  pre_chat_name: FieldRequirement
+  pre_chat_email: FieldRequirement
+  pre_chat_fields: PreChatField[]
 }
 
 export type UserRole = 'admin' | 'agent'
