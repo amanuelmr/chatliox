@@ -70,6 +70,12 @@ async def get_conversation(db: AsyncSession, conversation_id: uuid.UUID) -> Conv
     return await db.get(Conversation, conversation_id)
 
 
+async def set_visitor_email(db: AsyncSession, conv: Conversation, email: str) -> Conversation:
+    conv.visitor_email = email
+    await db.commit()
+    return await get_conversation_with_assignee(db, conv.id)
+
+
 async def get_conversation_with_assignee(
     db: AsyncSession, conversation_id: uuid.UUID
 ) -> Conversation | None:
