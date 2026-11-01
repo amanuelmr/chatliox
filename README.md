@@ -131,7 +131,14 @@ alembic upgrade head
 pytest
 ```
 
-CI runs these tests, the frontend build and the API Docker build on every pull request.
+Frontend tests use Vitest and Testing Library, with the API mocked:
+
+```bash
+cd frontend
+npm test
+```
+
+CI runs both suites, the frontend build and the API Docker build on every pull request.
 
 ## Environment Variables
 

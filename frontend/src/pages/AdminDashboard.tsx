@@ -17,12 +17,12 @@ import {
   updateWidgetConfig,
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
+import { draftProblem, parseOptions, toDraft, type DraftField } from '@/lib/preChatForm'
 import { useAuthStore } from '@/store/authStore'
 import type {
   BusinessHoursDay,
   FieldRequirement,
   Member,
-  PreChatField,
   User,
   UserRole,
   WidgetPosition,
@@ -776,42 +776,6 @@ const REQUIREMENT_LABELS: Record<FieldRequirement, string> = {
   hidden: "Don't ask",
   optional: 'Optional',
   required: 'Required',
-}
-
-// Editing state for one question. `key` keeps React rows stable before the API
-// has assigned an id, and options are edited as the comma-separated text typed.
-interface DraftField {
-  key: string
-  id?: string
-  label: string
-  type: PreChatField['type']
-  optionsText: string
-  required: boolean
-}
-
-const toDraft = (field: PreChatField): DraftField => ({
-  key: field.id,
-  id: field.id,
-  label: field.label,
-  type: field.type,
-  optionsText: field.options.join(', '),
-  required: field.required,
-})
-
-const parseOptions = (text: string) =>
-  text.split(',').map((o) => o.trim()).filter(Boolean)
-
-function draftProblem(fields: DraftField[]): string | null {
-  const labels = fields.map((f) => f.label.trim().toLowerCase())
-  if (labels.some((l) => !l)) return 'Every question needs a label.'
-  if (new Set(labels).size !== labels.length) return 'Each question needs a different label.'
-  for (const f of fields) {
-    if (f.type !== 'select') continue
-    const options = parseOptions(f.optionsText)
-    if (options.length < 2) return `"${f.label.trim()}" needs at least two options.`
-    if (new Set(options).size !== options.length) return `"${f.label.trim()}" has a repeated option.`
-  }
-  return null
 }
 
 function PreChatFormCard({
