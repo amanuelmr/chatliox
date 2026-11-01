@@ -109,7 +109,12 @@ def start_chat(client: AsyncClient):
         if message:
             res = await client.post(
                 "/messages",
-                json={"conversation_id": conv["id"], "content": message, "sender_type": "visitor"},
+                json={
+                    "conversation_id": conv["id"],
+                    "content": message,
+                    "sender_type": "visitor",
+                    "visitor_id": visitor_id,
+                },
             )
             assert res.status_code == 201, res.text
         return {**conv, "visitor_id": visitor_id}

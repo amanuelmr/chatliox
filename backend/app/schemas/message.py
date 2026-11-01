@@ -14,6 +14,8 @@ class CreateMessageRequest(BaseModel):
     content: NonEmptyStr
     sender_type: SenderType
     is_internal: bool = False
+    # Required when sending as the visitor.
+    visitor_id: str | None = None
 
 
 class MessageResponse(BaseModel):

@@ -26,7 +26,7 @@ async def _conversation(client: AsyncClient, admin: dict, **visitor) -> dict:
     )
     conv = res.json()
     for body, headers in (
-        ({"content": "Where is my parcel?", "sender_type": "visitor"}, {}),
+        ({"content": "Where is my parcel?", "sender_type": "visitor", "visitor_id": visitor_id}, {}),
         ({"content": "On its way!", "sender_type": "admin"}, admin["headers"]),
         ({"content": "Customer seems upset", "sender_type": "admin", "is_internal": True}, admin["headers"]),
     ):

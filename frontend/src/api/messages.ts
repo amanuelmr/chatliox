@@ -17,6 +17,7 @@ export interface UploadAttachmentParams {
   sender_type: 'admin' | 'visitor'
   file: File
   is_internal?: boolean
+  visitor_id?: string
 }
 
 export const uploadAttachment = ({
@@ -24,11 +25,13 @@ export const uploadAttachment = ({
   sender_type,
   file,
   is_internal,
+  visitor_id,
 }: UploadAttachmentParams): Promise<Message> => {
   const form = new FormData()
   form.append('conversation_id', conversation_id)
   form.append('sender_type', sender_type)
   if (is_internal) form.append('is_internal', 'true')
+  if (visitor_id) form.append('visitor_id', visitor_id)
   form.append('file', file)
   return client
     .post<Message>('/messages/attachments', form, { headers: { 'Content-Type': 'multipart/form-data' } })

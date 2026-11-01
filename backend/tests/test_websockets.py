@@ -73,7 +73,10 @@ def test_presence_typing_and_messages_reach_the_agent(http: TestClient, setup: d
             visitor.send_json({"type": "typing", "is_typing": True})
             assert agent.receive_json() == {"type": "typing", "user_id": visitor_id, "is_typing": True}
 
-            http.post("/messages", json={"conversation_id": conv, "content": "Hi!", "sender_type": "visitor"})
+            http.post(
+                "/messages",
+                json={"conversation_id": conv, "content": "Hi!", "sender_type": "visitor", "visitor_id": visitor_id},
+            )
             for ws in (agent, visitor):
                 event = ws.receive_json()
                 assert (event["type"], event["content"]) == ("message", "Hi!")

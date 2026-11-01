@@ -325,6 +325,7 @@ function WelcomeView({
           conversation_id: conv.id,
           content: firstMessage.trim(),
           sender_type: 'visitor',
+          visitor_id: visitorId,
         })
       }
       return conv
@@ -579,7 +580,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     sendTyping(false)
     setContent('')
     if (convStatus === 'closed') onStatusChange('waiting')
-    send({ conversation_id: conversationId, content: text, sender_type: 'visitor' })
+    send({ conversation_id: conversationId, content: text, sender_type: 'visitor', visitor_id: visitorId })
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -597,7 +598,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     e.target.value = ''
     if (!file) return
     if (convStatus === 'closed') onStatusChange('waiting')
-    upload({ conversation_id: conversationId, sender_type: 'visitor', file })
+    upload({ conversation_id: conversationId, sender_type: 'visitor', visitor_id: visitorId, file })
   }
 
   if (messagesUnavailable) return <UnavailableState />
