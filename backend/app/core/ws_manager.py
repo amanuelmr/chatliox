@@ -7,6 +7,8 @@ class ConnectionManager:
         self._rooms: dict[str, set[WebSocket]] = {}
         # { conversation_id: number of open visitor connections }
         self._visitors: dict[str, int] = {}
+        # { user_id: number of open dashboard connections }
+        self._agents: dict[str, int] = {}
 
     async def connect(self, conversation_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -35,6 +37,19 @@ class ConnectionManager:
 
     def is_visitor_connected(self, conversation_id: str) -> bool:
         return conversation_id in self._visitors
+
+    def agent_connected(self, user_id: str) -> None:
+        self._agents[user_id] = self._agents.get(user_id, 0) + 1
+
+    def agent_disconnected(self, user_id: str) -> None:
+        remaining = self._agents.get(user_id, 0) - 1
+        if remaining > 0:
+            self._agents[user_id] = remaining
+        else:
+            self._agents.pop(user_id, None)
+
+    def online_agent_ids(self) -> set[str]:
+        return set(self._agents)
 
     async def broadcast(self, conversation_id: str, data: dict) -> None:
         await self._send_to_room(conversation_id, data, exclude=None)

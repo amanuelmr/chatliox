@@ -127,3 +127,13 @@ async def update_pre_chat_form(
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def update_auto_assign(db: AsyncSession, org_id: uuid.UUID, enabled: bool) -> Organization | None:
+    org = await get_organization_by_id(db, org_id)
+    if org is None:
+        return None
+    org.auto_assign = enabled
+    await db.commit()
+    await db.refresh(org)
+    return org

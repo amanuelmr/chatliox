@@ -17,6 +17,7 @@ async def create_conversation(
     visitor_email: str | None,
     organization_id: uuid.UUID,
     pre_chat_answers: list[dict] | None = None,
+    assigned_to_id: uuid.UUID | None = None,
 ) -> Conversation:
     conversation = Conversation(
         visitor_id=visitor_id,
@@ -25,11 +26,11 @@ async def create_conversation(
         pre_chat_answers=pre_chat_answers or [],
         status=ConversationStatus.WAITING,
         organization_id=organization_id,
+        assigned_to_id=assigned_to_id,
     )
     db.add(conversation)
     await db.commit()
-    await db.refresh(conversation)
-    return conversation
+    return await get_conversation_with_assignee(db, conversation.id)
 
 
 async def get_conversations(
