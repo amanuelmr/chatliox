@@ -9,8 +9,11 @@ def _media_in_tmp(monkeypatch, tmp_path):
 
 
 def _upload(conv: dict, name: str, mime: str, data: bytes, sender_type: str = "visitor"):
+    data_fields = {"conversation_id": conv["id"], "sender_type": sender_type}
+    if sender_type == "visitor":
+        data_fields["visitor_id"] = conv["visitor_id"]
     return {
-        "data": {"conversation_id": conv["id"], "sender_type": sender_type},
+        "data": data_fields,
         "files": {"file": (name, data, mime)},
     }
 
@@ -45,3 +48,9 @@ async def test_uploading_as_an_agent_needs_a_login(client: AsyncClient, admin: d
     res = await client.post("/messages/attachments", headers=admin["headers"], **upload)
     assert res.status_code == 201
     assert res.json()["sender_name"] == "Ada Admin"
+
+
+async def test_another_visitor_cannot_upload(client: AsyncClient, admin: dict, start_chat):
+    conv = await start_chat(admin)
+    upload = _upload({**conv, "visitor_id": "someone-else"}, "a.txt", "text/plain", b"hi")
+    assert (await client.post("/messages/attachments", **upload)).status_code == 404

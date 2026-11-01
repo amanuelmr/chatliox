@@ -47,7 +47,13 @@ async def test_internal_notes_stay_internal(client: AsyncClient, admin: dict, st
 
 async def test_visitors_cannot_post_internal_notes_or_pose_as_agents(client: AsyncClient, admin: dict, start_chat):
     conv = await start_chat(admin)
-    note = {"conversation_id": conv["id"], "content": "x", "sender_type": "visitor", "is_internal": True}
+    note = {
+        "conversation_id": conv["id"],
+        "content": "x",
+        "sender_type": "visitor",
+        "visitor_id": conv["visitor_id"],
+        "is_internal": True,
+    }
     assert (await client.post("/messages", json=note)).status_code == 400
     agent = {"conversation_id": conv["id"], "content": "x", "sender_type": "admin"}
     assert (await client.post("/messages", json=agent)).status_code == 401
@@ -75,7 +81,13 @@ async def test_resolve_csat_and_reopen(client: AsyncClient, admin: dict, start_c
 
     # Writing again after it was resolved puts it back in the queue.
     res = await client.post(
-        "/messages", json={"conversation_id": conv["id"], "content": "One more thing", "sender_type": "visitor"}
+        "/messages",
+        json={
+            "conversation_id": conv["id"],
+            "content": "One more thing",
+            "sender_type": "visitor",
+            "visitor_id": conv["visitor_id"],
+        },
     )
     assert res.status_code == 201
     status = await client.get(f"/conversations/{conv['id']}/visitor-status", params={"visitor_id": conv["visitor_id"]})
@@ -127,3 +139,13 @@ async def test_opening_a_chat_marks_visitor_messages_read(client: AsyncClient, a
     assert visitor_view.json()[0]["is_read"] is False
     agent_view = await client.get(f"/conversations/{conv['id']}/messages", headers=admin["headers"])
     assert agent_view.json()[0]["is_read"] is True
+
+
+async def test_only_the_chats_visitor_can_write_as_the_visitor(client: AsyncClient, admin: dict, start_chat):
+    conv = await start_chat(admin)
+    message = {"conversation_id": conv["id"], "content": "hi", "sender_type": "visitor"}
+    assert (await client.post("/messages", json=message)).status_code == 404
+    res = await client.post("/messages", json={**message, "visitor_id": str(uuid.uuid4())})
+    assert res.status_code == 404
+    res = await client.post("/messages", json={**message, "visitor_id": conv["visitor_id"]})
+    assert res.status_code == 201

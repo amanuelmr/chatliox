@@ -52,4 +52,6 @@ export interface CreateMessageRequest {
   content: string
   sender_type: SenderType
   is_internal?: boolean
+  // Required when sending as the visitor.
+  visitor_id?: string
 }

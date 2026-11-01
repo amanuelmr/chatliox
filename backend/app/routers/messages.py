@@ -41,14 +41,23 @@ def _authorize_sender(
 
 
 async def _authorize_conversation(
-    db: AsyncSession, conversation_id: uuid.UUID, current_user: User | None
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    current_user: User | None,
+    sender_type: SenderType,
+    visitor_id: str | None,
 ):
     conv = await get_conversation(db, conversation_id)
-    if current_user is not None:
-        if conv is None or conv.organization_id != current_user.organization_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    elif conv is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    not_found = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    if conv is None:
+        raise not_found
+    if sender_type == SenderType.VISITOR:
+        # Only the visitor who started the chat may write as the visitor, the same
+        # check the other visitor endpoints make.
+        if visitor_id is None or str(conv.visitor_id) != visitor_id:
+            raise not_found
+    elif current_user is None or conv.organization_id != current_user.organization_id:
+        raise not_found
     return conv
 
 
@@ -90,7 +99,7 @@ async def create(
     current_user: User | None = Depends(get_optional_user),
 ) -> MessageResponse:
     _authorize_sender(body.sender_type, body.is_internal, current_user)
-    conv = await _authorize_conversation(db, body.conversation_id, current_user)
+    conv = await _authorize_conversation(db, body.conversation_id, current_user, body.sender_type, body.visitor_id)
     was_closed = conv.status == ConversationStatus.CLOSED
 
     sender_id = current_user.id if body.sender_type == SenderType.ADMIN else None
@@ -115,12 +124,13 @@ async def create_attachment(
     conversation_id: uuid.UUID = Form(...),
     sender_type: SenderType = Form(...),
     is_internal: bool = Form(False),
+    visitor_id: str | None = Form(None),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> MessageResponse:
     _authorize_sender(sender_type, is_internal, current_user)
-    conv = await _authorize_conversation(db, conversation_id, current_user)
+    conv = await _authorize_conversation(db, conversation_id, current_user, sender_type, visitor_id)
     was_closed = conv.status == ConversationStatus.CLOSED
 
     url, name, mime = await save_attachment(str(conversation_id), file)

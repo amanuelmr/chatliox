@@ -104,7 +104,12 @@ describe('widget pre-chat form', () => {
       pre_chat_answers: { order: 'A-1', topic: 'Shipping' },
     })
     expect(sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ conversation_id: 'c1', content: 'Where is my parcel?', sender_type: 'visitor' }),
+      expect.objectContaining({
+        conversation_id: 'c1',
+        content: 'Where is my parcel?',
+        sender_type: 'visitor',
+        visitor_id: expect.any(String),
+      }),
     )
   })
 
