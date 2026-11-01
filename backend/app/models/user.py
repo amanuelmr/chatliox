@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Index, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +37,8 @@ class User(UUIDMixin, TimestampMixin, Base):
         default=UserRole.AGENT,
         server_default="agent",
     )
+    # Round-robin position: the teammate assigned longest ago gets the next chat.
+    last_assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
