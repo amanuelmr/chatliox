@@ -2,6 +2,8 @@ import uuid
 
 from httpx import AsyncClient
 
+from tests.conftest import token_from
+
 
 async def test_health(client: AsyncClient):
     res = await client.get("/health")
@@ -45,3 +47,49 @@ async def test_login_rejects_wrong_password(client: AsyncClient, admin: dict):
 
     res = await client.post("/auth/login", json={"email": admin["email"], "password": "s3cret-pass"})
     assert res.status_code == 200
+
+
+async def test_password_reset_flow(client: AsyncClient, admin: dict, sent_emails):
+    res = await client.post("/auth/forgot-password", json={"email": admin["email"]})
+    assert res.status_code == 204
+    reset = sent_emails[-1]
+    assert reset["kind"] == "reset" and reset["to"] == admin["email"]
+
+    token = token_from(reset["url"])
+    res = await client.post(f"/auth/reset-password/{token}", json={"password": "n3w-pass-123"})
+    assert res.status_code == 200
+
+    # The link is single use, and only the new password works.
+    res = await client.post(f"/auth/reset-password/{token}", json={"password": "again-123"})
+    assert res.status_code == 400
+    res = await client.post("/auth/login", json={"email": admin["email"], "password": "s3cret-pass"})
+    assert res.status_code == 401
+    res = await client.post("/auth/login", json={"email": admin["email"], "password": "n3w-pass-123"})
+    assert res.status_code == 200
+
+
+async def test_forgot_password_does_not_reveal_unknown_emails(client: AsyncClient, sent_emails):
+    res = await client.post("/auth/forgot-password", json={"email": "nobody@example.com"})
+    assert res.status_code == 204
+    assert sent_emails == []
+
+
+async def test_invalid_verification_and_reset_links(client: AsyncClient):
+    res = await client.post("/auth/verify-email", json={"token": "not-a-token"})
+    assert res.status_code == 400
+    res = await client.post("/auth/reset-password/not-a-token", json={"password": "whatever-123"})
+    assert res.status_code == 400
+
+
+async def test_register_rejects_duplicate_email(client: AsyncClient, admin: dict):
+    res = await client.post(
+        "/auth/register",
+        json={"email": admin["email"], "password": "s3cret-pass", "full_name": "Dup", "org_name": "Acme"},
+    )
+    assert res.status_code == 400
+
+
+async def test_me_requires_a_valid_token(client: AsyncClient):
+    assert (await client.get("/auth/me")).status_code == 401
+    res = await client.get("/auth/me", headers={"Authorization": "Bearer nonsense"})
+    assert res.status_code == 401

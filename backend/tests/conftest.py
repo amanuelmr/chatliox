@@ -38,32 +38,80 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
+async def db() -> AsyncGenerator[AsyncSession, None]:
+    async with _sessions() as session:
+        yield session
+
+
+@pytest.fixture
 def sent_emails(monkeypatch) -> list[dict]:
     """Pretend email is configured and capture what would have been sent."""
     sent: list[dict] = []
 
-    async def fake_verification(to_email: str, full_name: str, verify_url: str) -> None:
-        sent.append({"to": to_email, "url": verify_url})
+    def capture(kind: str):
+        async def fake(to_email: str, *args) -> None:
+            sent.append({"kind": kind, "to": to_email, "args": args, "url": args[-1] if args else None})
+
+        return fake
 
     monkeypatch.setattr(settings, "RESEND_API_KEY", "test-key")
-    monkeypatch.setattr("app.routers.auth.send_verification_email", fake_verification)
+    monkeypatch.setattr("app.routers.auth.send_verification_email", capture("verify"))
+    monkeypatch.setattr("app.routers.auth.send_password_reset_email", capture("reset"))
+    monkeypatch.setattr("app.routers.organizations.send_invite_email", capture("invite"))
     return sent
 
 
+def token_from(url: str) -> str:
+    """The token in an emailed link, whether it's a query parameter or the last path segment."""
+    query = parse_qs(urlparse(url).query)
+    return query["token"][0] if "token" in query else url.rstrip("/").rsplit("/", 1)[-1]
+
+
 @pytest.fixture
-async def admin(client: AsyncClient, sent_emails: list[dict]) -> dict:
-    """A freshly registered, verified admin with its own organization."""
-    email = f"admin-{uuid.uuid4().hex[:8]}@example.com"
-    res = await client.post(
-        "/auth/register",
-        json={"email": email, "password": "s3cret-pass", "full_name": "Ada Admin", "org_name": "Acme"},
-    )
-    assert res.status_code == 201, res.text
+def make_admin(client: AsyncClient, sent_emails: list[dict]):
+    """Registers and verifies a new admin, each with its own organization."""
 
-    token = parse_qs(urlparse(sent_emails[-1]["url"]).query)["token"][0]
-    res = await client.post("/auth/verify-email", json={"token": token})
-    assert res.status_code == 200, res.text
+    async def make(full_name: str = "Ada Admin") -> dict:
+        email = f"admin-{uuid.uuid4().hex[:8]}@example.com"
+        res = await client.post(
+            "/auth/register",
+            json={"email": email, "password": "s3cret-pass", "full_name": full_name, "org_name": "Acme"},
+        )
+        assert res.status_code == 201, res.text
 
-    headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
-    me = (await client.get("/auth/me", headers=headers)).json()
-    return {"email": email, "headers": headers, "me": me}
+        res = await client.post("/auth/verify-email", json={"token": token_from(sent_emails[-1]["url"])})
+        assert res.status_code == 200, res.text
+
+        headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
+        me = (await client.get("/auth/me", headers=headers)).json()
+        return {"email": email, "headers": headers, "me": me}
+
+    return make
+
+
+@pytest.fixture
+async def admin(make_admin) -> dict:
+    return await make_admin()
+
+
+@pytest.fixture
+def start_chat(client: AsyncClient):
+    """Starts a conversation from the widget of `admin`'s organization."""
+
+    async def start(admin: dict, message: str | None = None, **visitor) -> dict:
+        visitor_id = str(uuid.uuid4())
+        res = await client.post(
+            "/conversations",
+            json={"visitor_id": visitor_id, "widget_key": admin["me"]["organization"]["widget_key"], **visitor},
+        )
+        assert res.status_code == 201, res.text
+        conv = res.json()
+        if message:
+            res = await client.post(
+                "/messages",
+                json={"conversation_id": conv["id"], "content": message, "sender_type": "visitor"},
+            )
+            assert res.status_code == 201, res.text
+        return {**conv, "visitor_id": visitor_id}
+
+    return start
