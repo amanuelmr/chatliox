@@ -17,7 +17,7 @@ import {
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
-import { addIncoming, confirmSent } from './messages'
+import { addIncoming, confirmSent, threadLayout } from './messages'
 import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
 import type { ProactiveMessage } from '@/types/auth'
@@ -279,5 +279,42 @@ describe('sent and incoming messages', () => {
 
   it('drops the placeholder when the saved message already arrived live', () => {
     expect(confirmSent([msg('a'), msg('opt-1'), msg('b')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('thread layout', () => {
+  const at = (id: string, time: string, patch: Partial<Message> = {}) =>
+    ({ id, created_at: time, sender_type: 'visitor', sender_id: null, is_internal: false, content: id, ...patch }) as Message
+  const now = new Date('2026-11-02T18:00:00')
+
+  it('marks where each day starts', () => {
+    const items = threadLayout([
+      at('a', '2026-10-27T10:00:00'),
+      at('b', '2026-11-01T10:00:00'),
+      at('c', '2026-11-02T09:00:00'),
+      at('d', '2026-11-02T09:30:00'),
+    ], now)
+    expect(items.map((i) => i.day)).toEqual([expect.stringMatching(/27/), 'Yesterday', 'Today', null])
+  })
+
+  it('runs one person\'s back-to-back messages together, but not across people, notes or long pauses', () => {
+    const items = threadLayout([
+      at('a', '2026-11-02T09:00:00'),
+      at('b', '2026-11-02T09:01:00'),
+      at('c', '2026-11-02T09:02:00', { sender_type: 'admin', sender_id: 'pat' }),
+      at('d', '2026-11-02T09:03:00', { sender_type: 'admin', sender_id: 'sam' }),
+      at('e', '2026-11-02T09:04:00', { sender_type: 'admin', sender_id: 'sam', is_internal: true }),
+      at('f', '2026-11-02T09:05:00'),
+      at('g', '2026-11-02T09:20:00'),
+    ], now)
+    expect(items.map((i) => [i.message.id, i.groupStart, i.groupEnd])).toEqual([
+      ['a', true, false],
+      ['b', false, true],
+      ['c', true, true],
+      ['d', true, true],
+      ['e', true, true],
+      ['f', true, true],
+      ['g', true, true],
+    ])
   })
 })
