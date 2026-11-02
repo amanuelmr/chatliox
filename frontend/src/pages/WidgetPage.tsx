@@ -19,7 +19,7 @@ import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/message
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
-import { confirmSent } from '@/lib/messages'
+import { addIncoming, confirmSent } from '@/lib/messages'
 import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
@@ -559,7 +559,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
   const appendMessage = useCallback(
     (msg: Message) => {
       queryClient.setQueryData<Message[]>(['widget-messages', conversationId], (prev = []) =>
-        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+        // There's one visitor per chat, so a visitor message is always this visitor's.
+        addIncoming(prev, msg, (m) => m.sender_type === 'visitor')
       )
     },
     [queryClient, conversationId]
