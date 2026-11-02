@@ -186,7 +186,7 @@ export default function WidgetPage() {
     <div
       className={
         isEmbedded
-          ? 'w-full h-full bg-white flex flex-col overflow-hidden'
+          ? 'w-full h-screen bg-white flex flex-col overflow-hidden'
           : `pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
               isOpen
                 ? 'opacity-100 scale-100 translate-y-0'
@@ -238,6 +238,7 @@ export default function WidgetPage() {
 
   // Embedded mode: the loader script's iframe is already sized/positioned to
   // exactly fit the panel, and it owns the launcher bubble — just fill the frame.
+  // The panel is sized to the frame's viewport, since no ancestor has a set height.
   if (isEmbedded) return panel
 
   return (
