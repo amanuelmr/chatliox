@@ -17,6 +17,16 @@ export interface Conversation {
   csat_rating: number | null
   // Answers to the org's custom pre-chat questions, as they were asked.
   pre_chat_answers: { label: string; value: string }[]
+  // The pages the visitor moved through while chatting, oldest first.
+  visitor_pages: PageView[]
+  visitor_user_agent: string | null
+  visitor_referrer: string | null
+}
+
+export interface PageView {
+  url: string
+  title: string
+  at: string
 }
 
 export interface Message {

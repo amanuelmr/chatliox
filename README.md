@@ -28,6 +28,7 @@ The project includes:
 - Chat transfers: take, hand over or release a chat with an optional note for the team, and filter the inbox to your own or unassigned chats
 - A first-response target: waiting chats count down to it in the inbox, the widget shows visitors the expected reply time, and analytics reports how often it was met
 - Saved replies and macros: type `/` and a shortcut in the reply box; a saved reply can also tag, assign and resolve the chat in the same step
+- Visitor context: each chat shows the pages the visitor moved through, their browser and the site that sent them
 - Conversation tags and full-text search across the inbox
 - Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
 - An analytics view with volume, first response time, and per-agent stats

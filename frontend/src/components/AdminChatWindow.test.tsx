@@ -55,10 +55,10 @@ const MACROS = [
   macro('m3', 'Spam', 'spam', '', { actions: { add_tags: ['spam'], assign: null, resolve: true } }),
 ]
 
-async function openChat() {
+async function openChat(patch: Partial<Conversation> = {}) {
   useAuthStore.getState().setAuth('token', { id: 'me', full_name: 'Wes' } as User)
   vi.mocked(getConversations).mockResolvedValue([
-    { id: 'c1', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [] } as unknown as Conversation,
+    { id: 'c1', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [], visitor_pages: [], ...patch } as Conversation,
   ])
   vi.mocked(getMessages).mockResolvedValue([])
   vi.mocked(getCannedResponses).mockResolvedValue(MACROS)
@@ -67,7 +67,7 @@ async function openChat() {
 }
 
 describe('agent chat window', () => {
-  beforeEach(openChat)
+  beforeEach(() => openChat())
 
   it('shows which teammates also have the chat open, but not yourself', async () => {
     await emit({ type: 'viewers', agents: [ME] })
@@ -111,12 +111,32 @@ describe('agent chat window', () => {
   })
 })
 
+describe('visitor details', () => {
+  it('shows where the visitor came from, their browser and the pages they viewed', async () => {
+    await openChat({
+      visitor_user_agent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+      visitor_referrer: 'https://www.search.test/?q=boots',
+      visitor_pages: [
+        { url: 'https://shop.test/', title: 'Shop', at: '2026-11-02T10:00:00Z' },
+        { url: 'https://shop.test/boots?size=9', title: '', at: '2026-11-02T10:02:00Z' },
+      ],
+    })
+    expect(screen.getByText('Chrome 130 on macOS')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'search.test' })).toHaveAttribute('href', 'https://www.search.test/?q=boots')
+
+    // Newest first; a page without a title is shown by its path.
+    const trail = within(screen.getByRole('list', { name: 'Pages viewed' }))
+    expect(trail.getAllByRole('link').map((a) => a.textContent)).toEqual(['/boots?size=9', 'Shop'])
+  })
+})
+
 describe('saved replies in the reply box', () => {
   beforeEach(async () => {
     vi.mocked(applyMacro).mockReset()
     vi.mocked(sendMessage).mockReset().mockResolvedValue({ id: 'sent' } as Message)
     vi.mocked(applyMacro).mockResolvedValue({
-      conversation: { id: 'c1', visitor_name: 'Vera', status: 'closed', tags: ['refund'], pre_chat_answers: [] } as unknown as Conversation,
+      conversation: { id: 'c1', visitor_name: 'Vera', status: 'closed', tags: ['refund'], pre_chat_answers: [], visitor_pages: [] } as unknown as Conversation,
       message: null,
     })
     await openChat()

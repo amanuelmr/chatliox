@@ -16,6 +16,7 @@ from app.routers import analytics, auth, canned_responses, conversations, health
 from app.services.alerts import email_notification_loop
 from app.services.storage import MEDIA_ROOT
 from app.websockets import router as ws_router
+from app.websockets import visitors as visitor_ws
 
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ app.include_router(auth.router)
 app.include_router(conversations.router)
 app.include_router(messages.router)
 app.include_router(ws_router.router)
+app.include_router(visitor_ws.router)
 app.include_router(organizations.router)
 app.include_router(canned_responses.router)
 app.include_router(analytics.router)

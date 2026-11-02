@@ -6,10 +6,12 @@ import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
 import { listNames } from '@/lib/teammates'
+import { describeBrowser, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import AssignMenu from '@/components/AssignMenu'
 import { MacroList, MacroPickerButton } from '@/components/MacroMenu'
+import PageTrail from '@/components/PageTrail'
 import Spinner from '@/components/Spinner'
 import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
@@ -538,6 +540,22 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             </div>
 
             <Field label="Email" value={conv?.visitor_email ?? '—'} />
+            {conv?.visitor_user_agent && (
+              <Field label="Browser" value={describeBrowser(conv.visitor_user_agent) ?? 'Unknown'} />
+            )}
+            {conv?.visitor_referrer && (
+              <Field label="Came from" value={
+                <a
+                  href={conv.visitor_referrer}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={conv.visitor_referrer}
+                  className="text-xs text-brand-600 hover:underline break-all"
+                >
+                  {siteName(conv.visitor_referrer)}
+                </a>
+              } />
+            )}
             {conv?.pre_chat_answers.map((answer) => (
               <Field key={answer.label} label={answer.label} value={answer.value} />
             ))}
@@ -561,6 +579,8 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             )}
           </div>
         </div>
+
+        {conv && <PageTrail pages={conv.visitor_pages} />}
 
         {/* Tags */}
         <div className="bg-white rounded-xl shadow-sm ring-1 ring-zinc-200 overflow-hidden">

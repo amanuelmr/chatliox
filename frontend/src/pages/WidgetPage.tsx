@@ -21,6 +21,8 @@ import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
 import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
+import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
+import { useVisitorTracking } from '@/hooks/useVisitorTracking'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 import type { FieldRequirement, PreChatField } from '@/types/auth'
@@ -58,11 +60,6 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// Messages exchanged with the host page when this widget is running inside the
-// loader script's iframe (frontend/public/widget.js). See that file for the other side.
-const WIDGET_MSG_SOURCE = 'chatliox-widget'
-const LOADER_MSG_SOURCE = 'chatliox-loader'
-
 function postToParent(payload: Record<string, unknown>) {
   window.parent.postMessage({ source: WIDGET_MSG_SOURCE, ...payload }, '*')
 }
@@ -83,6 +80,8 @@ export default function WidgetPage() {
   )
   const [adminName, setAdminName] = useState<string | null>(null)
   const [convStatus, setConvStatus] = useState<ConversationStatus | null>(null)
+
+  useVisitorTracking(widgetKey, visitorId, isEmbedded)
 
   const { data: widgetConfig } = useQuery({
     queryKey: ['widget-config', widgetKey],

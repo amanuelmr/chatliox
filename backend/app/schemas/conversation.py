@@ -59,3 +59,6 @@ class ConversationResponse(BaseModel):
     tags: list[str] = []
     csat_rating: int | None = None
     pre_chat_answers: list[dict] = []
+    visitor_pages: list[dict] = []
+    visitor_user_agent: str | None = None
+    visitor_referrer: str | None = None
