@@ -22,6 +22,7 @@ async def create_conversation(
     visitor_pages: list[dict] | None = None,
     visitor_user_agent: str | None = None,
     visitor_referrer: str | None = None,
+    proactive_message_id: str | None = None,
 ) -> Conversation:
     conversation = Conversation(
         visitor_id=visitor_id,
@@ -31,6 +32,7 @@ async def create_conversation(
         visitor_pages=visitor_pages or [],
         visitor_user_agent=visitor_user_agent,
         visitor_referrer=visitor_referrer,
+        proactive_message_id=proactive_message_id,
         status=ConversationStatus.WAITING,
         waiting_since=datetime.now(timezone.utc),
         organization_id=organization_id,

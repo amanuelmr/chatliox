@@ -19,11 +19,15 @@ import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/message
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
+import { addIncoming, confirmSent } from '@/lib/messages'
 import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
 import { useVisitorTracking } from '@/hooks/useVisitorTracking'
+import { useHostPage, useProactiveMessage } from '@/hooks/useProactiveMessage'
+import { hiddenReason, isMobileDevice, onAllowedSite } from '@/lib/engage'
 import Spinner from '@/components/Spinner'
+import { QuickReplies, TeamBubbles } from '@/components/widget/WelcomeThread'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 import type { FieldRequirement, PreChatField } from '@/types/auth'
 
@@ -81,8 +85,6 @@ export default function WidgetPage() {
   const [adminName, setAdminName] = useState<string | null>(null)
   const [convStatus, setConvStatus] = useState<ConversationStatus | null>(null)
 
-  useVisitorTracking(widgetKey, visitorId, isEmbedded)
-
   const { data: widgetConfig } = useQuery({
     queryKey: ['widget-config', widgetKey],
     queryFn: () => getWidgetConfig(widgetKey),
@@ -94,6 +96,35 @@ export default function WidgetPage() {
   const greeting = widgetConfig?.widget_greeting ?? DEFAULT_GREETING
   const isOnline = widgetConfig?.is_online ?? true
   const awayMessage = widgetConfig?.away_message ?? ''
+  const teamName = widgetConfig?.name ?? 'Support'
+
+  // The team's display rules decide whether the widget appears on this page at all.
+  const hostPage = useHostPage(isEmbedded)
+  const hiddenHere = widgetConfig && hostPage ? hiddenReason(widgetConfig, hostPage.url, isMobileDevice(navigator.userAgent)) : null
+  useEffect(() => {
+    if (isEmbedded && widgetConfig && hostPage) postToParent({ type: 'display', visible: hiddenHere === null })
+  }, [isEmbedded, widgetConfig, hostPage, hiddenHere])
+
+  // Someone else's site using this widget key isn't the team's traffic.
+  useVisitorTracking(widgetKey, visitorId, isEmbedded && !(widgetConfig && hostPage && !onAllowedSite(widgetConfig, hostPage.url)))
+
+  // Invitations only go to visitors who haven't started a chat, while the team is in.
+  const { proactive, dismiss: dismissProactive } = useProactiveMessage(
+    widgetKey,
+    widgetConfig?.proactive_messages ?? [],
+    hostPage,
+    isEmbedded && !conversationId && !embeddedOpen && isOnline && hiddenHere === null,
+  )
+
+  // The proactive message reads as the team's last greeting, before and after the chat starts.
+  const greetingBubbles = [...(widgetConfig?.welcome_messages ?? []), ...(proactive ? [proactive.message] : [])]
+
+  // The loader shows the invitation above the launcher while the chat is closed.
+  useEffect(() => {
+    if (proactive && !embeddedOpen) {
+      postToParent({ type: 'teaser', text: proactive.message, name: teamName, color: widgetConfig?.widget_color })
+    }
+  }, [proactive, embeddedOpen, teamName, widgetConfig?.widget_color])
 
   useEffect(() => {
     document.documentElement.style.background = 'transparent'
@@ -108,10 +139,11 @@ export default function WidgetPage() {
       const data = event.data as { source?: string; type?: string; open?: boolean } | null
       if (!data || data.source !== LOADER_MSG_SOURCE) return
       if (data.type === 'visibility') setEmbeddedOpen(Boolean(data.open))
+      else if (data.type === 'teaser-dismissed') dismissProactive()
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
-  }, [isEmbedded])
+  }, [isEmbedded, dismissProactive])
 
   // Tell the loader script we're ready and hand it the org's widget layout so the
   // launcher bubble/iframe match dashboard settings without any script-tag config.
@@ -155,7 +187,7 @@ export default function WidgetPage() {
     <div
       className={
         isEmbedded
-          ? 'w-full h-full bg-white flex flex-col overflow-hidden'
+          ? 'w-full h-screen bg-white flex flex-col overflow-hidden'
           : `pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
               isOpen
                 ? 'opacity-100 scale-100 translate-y-0'
@@ -182,6 +214,8 @@ export default function WidgetPage() {
           onIncomingAdminMessage={handleIncomingAdminMessage}
           isOnline={isOnline}
           shareDraft={widgetConfig?.typing_preview ?? false}
+          teamName={teamName}
+          welcomeMessages={greetingBubbles}
         />
       ) : (
         <WelcomeView
@@ -194,6 +228,10 @@ export default function WidgetPage() {
           nameRequirement={widgetConfig?.pre_chat_name ?? 'optional'}
           emailRequirement={widgetConfig?.pre_chat_email ?? 'optional'}
           questions={widgetConfig?.pre_chat_fields ?? []}
+          teamName={teamName}
+          welcomeMessages={greetingBubbles}
+          quickReplies={widgetConfig?.quick_replies ?? []}
+          proactiveMessageId={proactive?.id}
         />
       )}
     </div>
@@ -201,6 +239,7 @@ export default function WidgetPage() {
 
   // Embedded mode: the loader script's iframe is already sized/positioned to
   // exactly fit the panel, and it owns the launcher bubble — just fill the frame.
+  // The panel is sized to the frame's viewport, since no ancestor has a set height.
   if (isEmbedded) return panel
 
   return (
@@ -289,6 +328,11 @@ interface WelcomeViewProps {
   nameRequirement: FieldRequirement
   emailRequirement: FieldRequirement
   questions: PreChatField[]
+  teamName: string
+  welcomeMessages: string[]
+  quickReplies: string[]
+  // Set when the visitor opened the chat from a proactive message.
+  proactiveMessageId?: string
 }
 
 const INPUT_CLASS =
@@ -304,6 +348,10 @@ function WelcomeView({
   nameRequirement,
   emailRequirement,
   questions,
+  teamName,
+  welcomeMessages,
+  quickReplies,
+  proactiveMessageId,
 }: WelcomeViewProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -316,14 +364,15 @@ function WelcomeView({
   const showName = nameRequirement !== 'hidden'
   const emailValid = EMAIL_PATTERN.test(email.trim())
   const answered = (q: PreChatField) => (answers[q.id] ?? '').trim() !== ''
-  const canSubmit =
-    firstMessage.trim() !== '' &&
+  // Everything but the message itself.
+  const detailsReady =
     (emailRequired ? emailValid : email.trim() === '' || emailValid) &&
     (nameRequirement !== 'required' || name.trim() !== '') &&
     questions.every((q) => !q.required || answered(q))
+  const canSubmit = firstMessage.trim() !== '' && detailsReady
 
   const { mutate: startChat, isPending, error: startError } = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (message: string) => {
       const conv = await createConversation({
         visitor_id: visitorId,
         visitor_name: (showName && name.trim()) || undefined,
@@ -332,11 +381,12 @@ function WelcomeView({
         pre_chat_answers: Object.fromEntries(
           questions.filter(answered).map((q) => [q.id, answers[q.id].trim()]),
         ),
+        proactive_message_id: proactiveMessageId,
       })
-      if (firstMessage.trim()) {
+      if (message.trim()) {
         await sendMessage({
           conversation_id: conv.id,
-          content: firstMessage.trim(),
+          content: message.trim(),
           sender_type: 'visitor',
           visitor_id: visitorId,
         })
@@ -353,6 +403,21 @@ function WelcomeView({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
+        {(welcomeMessages.length > 0 || quickReplies.length > 0) && (
+          <div className="flex flex-col gap-3 pb-2">
+            <TeamBubbles messages={welcomeMessages} brandColor={brandColor} teamName={teamName} />
+            <QuickReplies
+              replies={quickReplies}
+              brandColor={brandColor}
+              disabled={isPending}
+              // One tap sends it, unless the form still needs something from the visitor.
+              onPick={(reply) => {
+                setFirstMessage(reply)
+                if (detailsReady) startChat(reply)
+              }}
+            />
+          </div>
+        )}
         {showName && (
           <input
             type="text"
@@ -418,7 +483,7 @@ function WelcomeView({
         )}
 
         <button
-          onClick={() => startChat()}
+          onClick={() => startChat(firstMessage)}
           disabled={!canSubmit || isPending}
           style={{ backgroundColor: brandColor }}
           className="w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
@@ -448,9 +513,12 @@ interface ChatViewProps {
   isOnline: boolean
   // Lets the team see the message as it's typed (the org's typing preview setting).
   shareDraft: boolean
+  teamName: string
+  // Kept at the top of the conversation, since the visitor's first message may answer them.
+  welcomeMessages: string[]
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft, teamName, welcomeMessages }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -491,7 +559,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
   const appendMessage = useCallback(
     (msg: Message) => {
       queryClient.setQueryData<Message[]>(['widget-messages', conversationId], (prev = []) =>
-        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+        // There's one visitor per chat, so a visitor message is always this visitor's.
+        addIncoming(prev, msg, (m) => m.sender_type === 'visitor')
       )
     },
     [queryClient, conversationId]
@@ -579,7 +648,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     onSuccess: (real, _, ctx) => {
       queryClient.setQueryData<Message[]>(
         ['widget-messages', conversationId],
-        (msgs = []) => msgs.map((m) => (m.id === ctx?.tempId ? real : m)),
+        (msgs = []) => confirmSent(msgs, ctx?.tempId, real),
       )
     },
     onError: (_, vars, ctx) => {
@@ -629,7 +698,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
         {isLoading && (
           <p className="text-center text-xs text-zinc-400 py-6">Loading…</p>
         )}
-        {!isLoading && messages.length === 0 && (
+        {!isLoading && <TeamBubbles messages={welcomeMessages} brandColor={brandColor} teamName={teamName} />}
+        {!isLoading && messages.length === 0 && welcomeMessages.length === 0 && (
           <p className="text-center text-xs text-zinc-400 py-6">No messages yet.</p>
         )}
         {messages.filter((msg) => !msg.is_internal).map((msg) => (

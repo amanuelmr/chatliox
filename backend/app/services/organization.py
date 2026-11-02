@@ -157,3 +157,15 @@ async def update_response_target(db: AsyncSession, org_id: uuid.UUID, minutes: i
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def update_organization(db: AsyncSession, org_id: uuid.UUID, values: dict) -> Organization | None:
+    """Sets the given columns on the organization."""
+    org = await get_organization_by_id(db, org_id)
+    if org is None:
+        return None
+    for field, value in values.items():
+        setattr(org, field, value)
+    await db.commit()
+    await db.refresh(org)
+    return org

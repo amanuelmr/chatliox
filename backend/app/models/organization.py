@@ -71,6 +71,28 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     # Show agents what the visitor is typing before they send it.
     typing_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
+    # Shown in the widget before a chat starts: up to three greeting bubbles from
+    # the team, and up to four one-tap starters the visitor can send.
+    welcome_messages: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    quick_replies: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    # Invitations the widget pops up on its own, see ProactiveMessage for the shape.
+    proactive_messages: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    # Where the widget appears: "all", "desktop" or "mobile"; pages to hide it on
+    # (matched against the address); and, when not empty, the only sites it loads on.
+    widget_devices: Mapped[str] = mapped_column(String(10), nullable=False, server_default="all")
+    widget_hidden_paths: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    widget_allowed_domains: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="organization"

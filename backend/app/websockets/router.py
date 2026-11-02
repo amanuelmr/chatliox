@@ -52,6 +52,9 @@ async def dashboard_ws(
         await websocket.close(code=_POLICY_VIOLATION)
         return
 
+    # The socket stays open for the whole session; don't hold a connection that long.
+    await db.close()
+
     room = org_room(user.organization_id)
     manager.add_connection(room, websocket)
     manager.agent_connected(str(user.id))
@@ -149,6 +152,9 @@ async def conversation_ws(
     if is_visitor:
         manager.visitor_connected(conversation_id)
         await touch_visitor_last_seen(db, conv_uuid)
+    # The socket stays open for the whole chat; don't hold a connection that long.
+    # The session reconnects by itself if it's used again on the way out.
+    await db.close()
     await manager.broadcast_except(
         conversation_id,
         {"type": "presence", "user_id": effective_user_id, "status": "online"},

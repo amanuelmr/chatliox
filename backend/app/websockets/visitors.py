@@ -53,6 +53,9 @@ async def visitor_ws(
         return
 
     org_id = str(org.id)
+    # This socket is open on every page of the customer's site, so it must not pin
+    # a pooled connection; the session reconnects for each page it records.
+    await db.close()
     user_agent = websocket.headers.get("user-agent")
     visitor = visitor_tracker.connected(org_id, visitor_id, user_agent[:512] if user_agent else None)
     try:
@@ -70,6 +73,7 @@ async def visitor_ws(
                 continue
             await _publish_visitor(org_id, visitor)
             conv = await record_page(db, org.id, visitor_id, page)
+            await db.close()
             if conv is not None:
                 await publish_conversation(conv)
     except WebSocketDisconnect:

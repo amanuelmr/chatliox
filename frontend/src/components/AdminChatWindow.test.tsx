@@ -150,6 +150,37 @@ describe('visitor details', () => {
   })
 })
 
+describe('sending a reply', () => {
+  it('shows the reply once when the live update arrives before the send finishes', async () => {
+    useAuthStore.getState().setAuth('token', { id: 'me', full_name: 'Wes' } as User)
+    let finish: (m: Message) => void = () => {}
+    vi.mocked(sendMessage).mockReset().mockReturnValue(new Promise<Message>((resolve) => { finish = resolve }))
+    await openChat()
+    await userEvent.type(screen.getByLabelText('Reply'), 'On its way!')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const saved = {
+      id: 'm1', conversation_id: 'c1', content: 'On its way!', sender_type: 'admin', sender_id: 'me', sender_name: 'Wes',
+      is_read: true, is_internal: false, created_at: new Date().toISOString(),
+      attachment_url: null, attachment_name: null, attachment_mime: null,
+    } as Message
+    // The reply shows right away while it's being sent...
+    expect(await screen.findByText('On its way!')).toBeInTheDocument()
+    // ...then the live update for it arrives before the send request returns.
+    await emit({ type: 'message', ...saved })
+    // Cache updates reach the screen a tick later, so wait for the saved copy to show.
+    const copies = () => screen.getAllByText('On its way!')
+    const sending = (el: HTMLElement) => el.closest('.opacity-60') !== null
+    await vi.waitFor(() => expect(copies().some((el) => !sending(el))).toBe(true))
+    // Still waiting on the send request: the live copy has taken the placeholder's place.
+    expect(copies()).toHaveLength(1)
+
+    await act(async () => finish(saved))
+    await vi.waitFor(() => expect(copies().every((el) => !sending(el))).toBe(true))
+    expect(copies()).toHaveLength(1)
+  })
+})
+
 describe('saved replies in the reply box', () => {
   beforeEach(async () => {
     vi.mocked(applyMacro).mockReset()

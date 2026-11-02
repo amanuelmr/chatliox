@@ -3,11 +3,25 @@ import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
 import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
+import {
+  NEW_PROACTIVE,
+  describeTrigger,
+  dueProactive,
+  hiddenReason,
+  isMobileDevice,
+  normalizeDomain,
+  recordVisit,
+  type DisplayRules,
+  type VisitHistory,
+} from './engage'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
+import { addIncoming, confirmSent } from './messages'
 import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
+import type { ProactiveMessage } from '@/types/auth'
+import type { Message } from '@/types/chat'
 
 function axiosError(status: number, data: unknown) {
   const config = { headers: new AxiosHeaders() }
@@ -174,5 +188,96 @@ describe('visitor details', () => {
     expect(pageLabel({ url: 'https://shop.test/boots', title: 'Boots', at: '' })).toBe('Boots')
     expect(siteName('https://www.search.test/?q=1')).toBe('search.test')
     expect(siteName('not a url')).toBe('not a url')
+  })
+})
+
+describe('proactive messages', () => {
+  const msg = (patch: Partial<ProactiveMessage>): ProactiveMessage => ({ ...NEW_PROACTIVE, id: 'p1', message: 'Hi', ...patch })
+  const at = (visits: number, shown: Record<string, number> = {}): VisitHistory => ({ visits, lastSeen: 0, shown })
+
+  it('counts a new visit after half an hour away', () => {
+    const first = recordVisit(null, 0)
+    expect(first.visits).toBe(1)
+    expect(recordVisit(first, 29 * 60_000).visits).toBe(1)
+    expect(recordVisit(first, 31 * 60_000).visits).toBe(2)
+  })
+
+  it('waits for the page, the delay and the visit count', () => {
+    const pricing = msg({ page_contains: '/Pricing', delay_seconds: 10, min_visits: 2 })
+    const ctx = { url: 'https://shop.test/pricing?plan=pro', secondsOnPage: 10, history: at(2) }
+    expect(dueProactive([pricing], ctx)).toBe(pricing)
+    expect(dueProactive([pricing], { ...ctx, url: 'https://shop.test/blog' })).toBeNull()
+    expect(dueProactive([pricing], { ...ctx, secondsOnPage: 9 })).toBeNull()
+    expect(dueProactive([pricing], { ...ctx, history: at(1) })).toBeNull()
+    expect(dueProactive([{ ...pricing, enabled: false }], ctx)).toBeNull()
+  })
+
+  it('shows once per visitor or once every visit', () => {
+    const ctx = { url: 'https://shop.test/', secondsOnPage: 60 }
+    expect(dueProactive([msg({ frequency: 'once' })], { ...ctx, history: at(3, { p1: 1 }) })).toBeNull()
+    expect(dueProactive([msg({ frequency: 'every_visit' })], { ...ctx, history: at(3, { p1: 3 }) })).toBeNull()
+    expect(dueProactive([msg({ frequency: 'every_visit' })], { ...ctx, history: at(3, { p1: 2 }) })).not.toBeNull()
+  })
+
+  it('describes when a message shows in plain words', () => {
+    expect(describeTrigger(msg({ page_contains: '/pricing', delay_seconds: 10, min_visits: 2 }))).toBe(
+      'On pages containing /pricing, after 10 seconds, from the 2nd visit. Once per visitor.',
+    )
+    expect(describeTrigger(msg({ delay_seconds: 0, frequency: 'every_visit' }))).toBe('On any page, right away. Once every visit.')
+    expect(describeTrigger(msg({ delay_seconds: 1, min_visits: 3 }))).toBe('On any page, after 1 second, from the 3rd visit. Once per visitor.')
+  })
+})
+
+describe('widget display rules', () => {
+  const rules = (patch: Partial<DisplayRules> = {}): DisplayRules => ({
+    widget_devices: 'all', widget_hidden_paths: [], widget_allowed_domains: [], ...patch,
+  })
+
+  it('tidies pasted sites the way the server does', () => {
+    expect(normalizeDomain(' https://www.Shop.com/pricing ')).toBe('shop.com')
+    expect(normalizeDomain('*.blog.shop.com')).toBe('blog.shop.com')
+    expect(normalizeDomain('localhost:5176')).toBe('localhost:5176')
+  })
+
+  it('loads only on allowed sites and their subdomains', () => {
+    const r = rules({ widget_allowed_domains: ['shop.com'] })
+    expect(hiddenReason(r, 'https://shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://www.shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://help.shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://notshop.com/', false)).toBe("notshop.com isn't one of your allowed sites.")
+  })
+
+  it('follows the device setting and the hidden pages', () => {
+    expect(hiddenReason(rules({ widget_devices: 'desktop' }), 'https://shop.com/', true)).toBe('It only shows on desktop.')
+    expect(hiddenReason(rules({ widget_devices: 'mobile' }), 'https://shop.com/', false)).toBe('It only shows on mobile.')
+    const r = rules({ widget_hidden_paths: ['/Checkout'] })
+    expect(hiddenReason(r, 'https://shop.com/checkout/pay', false)).toBe("It's hidden on pages containing /Checkout.")
+    expect(hiddenReason(r, 'https://shop.com/cart', false)).toBeNull()
+  })
+
+  it('spots phones and tablets', () => {
+    expect(isMobileDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) Mobile/15E148')).toBe(true)
+    expect(isMobileDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0.0.0')).toBe(false)
+  })
+})
+
+describe('sent and incoming messages', () => {
+  const msg = (id: string, patch: Partial<Message> = {}) => ({ id, content: id, is_internal: false, ...patch }) as Message
+  const mine = (m: Message) => m.sender_id === 'me'
+
+  it("puts this window's own message in its placeholder's place", () => {
+    const list = [msg('a'), msg('opt-1', { content: 'Hi' })]
+    expect(addIncoming(list, msg('b', { content: 'Hi', sender_id: 'me' }), mine).map((m) => m.id)).toEqual(['a', 'b'])
+    // A teammate's message with the same words is a different message.
+    expect(addIncoming(list, msg('c', { content: 'Hi', sender_id: 'sam' }), mine).map((m) => m.id)).toEqual(['a', 'opt-1', 'c'])
+    expect(addIncoming([msg('a')], msg('a'), mine)).toHaveLength(1)
+  })
+
+  it('swaps the placeholder for the saved message', () => {
+    expect(confirmSent([msg('a'), msg('opt-1')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
+  })
+
+  it('drops the placeholder when the saved message already arrived live', () => {
+    expect(confirmSent([msg('a'), msg('opt-1'), msg('b')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
   })
 })

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -57,6 +57,12 @@ const config = (patch: Partial<WidgetConfig> = {}): WidgetConfig => ({
   pre_chat_fields: [],
   first_response_minutes: null,
   typing_preview: true,
+  welcome_messages: [],
+  quick_replies: [],
+  proactive_messages: [],
+  widget_devices: 'all',
+  widget_hidden_paths: [],
+  widget_allowed_domains: [],
   is_online: true,
   ...patch,
 })
@@ -193,5 +199,104 @@ describe('widget typing preview', () => {
     await userEvent.type(await screen.findByPlaceholderText('Type a message…'), 'Hey')
     expect(typed().length).toBeGreaterThan(0)
     expect(typed().every((e) => !('draft' in e))).toBe(true)
+  })
+})
+
+describe('widget welcome', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.mocked(createConversation).mockReset().mockResolvedValue({ id: 'c1' } as Conversation)
+    vi.mocked(sendMessage).mockReset().mockResolvedValue({} as Message)
+    vi.mocked(getVisitorMessages).mockResolvedValue([])
+    vi.mocked(getVisitorConversationStatus).mockResolvedValue({ status: 'waiting', has_email: false })
+  })
+
+  const welcoming = (patch: Partial<WidgetConfig> = {}) =>
+    config({ welcome_messages: ['Hi there!', 'Ask us anything.'], quick_replies: ['Pricing', 'Shipping'], ...patch })
+
+  it('greets the visitor, and a quick reply starts the chat in one tap', async () => {
+    await openWidget(welcoming())
+    const team = await screen.findByLabelText('Messages from Acme')
+    expect(within(team).getByText('Hi there!')).toBeInTheDocument()
+    expect(within(team).getByText('Ask us anything.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Shipping' }))
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
+    expect(vi.mocked(sendMessage).mock.calls[0][0]).toEqual(expect.objectContaining({ content: 'Shipping' }))
+    // The greeting stays at the top of the conversation the visitor replied to.
+    expect(await screen.findByLabelText('Messages from Acme')).toBeInTheDocument()
+  })
+
+  it('waits for required details before sending a quick reply', async () => {
+    await openWidget(welcoming({ pre_chat_name: 'required' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Pricing' }))
+    expect(createConversation).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('How can we help you?')).toHaveValue('Pricing')
+
+    await userEvent.type(screen.getByPlaceholderText('Your name'), 'Vi')
+    await userEvent.click(sendButton())
+    await vi.waitFor(() => expect(createConversation).toHaveBeenCalled())
+  })
+})
+
+describe('widget proactive message', () => {
+  const LOADER = 'chatliox-loader'
+  const fromLoader = (data: Record<string, unknown>) =>
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: LOADER, ...data }, source: window })) })
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.mocked(createConversation).mockReset().mockResolvedValue({ id: 'c1' } as Conversation)
+    vi.mocked(sendMessage).mockReset().mockResolvedValue({} as Message)
+    vi.mocked(getVisitorMessages).mockResolvedValue([])
+    vi.mocked(getVisitorConversationStatus).mockResolvedValue({ status: 'waiting', has_email: false })
+  })
+
+  it('pops up on a matching page, then credits the chat it starts', async () => {
+    const posted = vi.spyOn(window, 'postMessage')
+    vi.mocked(getWidgetConfig).mockResolvedValue(config({
+      proactive_messages: [
+        { id: 'p1', message: 'Comparing plans?', page_contains: '/pricing', delay_seconds: 0, min_visits: 1, frequency: 'once', enabled: true },
+      ],
+    }))
+    renderAt(<WidgetPage />, `/widget?key=${KEY}&embed=1`)
+    await vi.waitFor(() => expect(getWidgetConfig).toHaveBeenCalled())
+
+    await fromLoader({ type: 'page', url: 'https://shop.test/blog', title: 'Blog' })
+    await fromLoader({ type: 'page', url: 'https://shop.test/pricing', title: 'Pricing' })
+    await vi.waitFor(() =>
+      expect(posted).toHaveBeenCalledWith(expect.objectContaining({ type: 'teaser', text: 'Comparing plans?' }), '*'),
+    )
+    expect(posted.mock.calls.filter(([data]) => (data as { type?: string }).type === 'teaser')).toHaveLength(1)
+
+    // The visitor clicks it: the loader opens the chat, which leads with the message.
+    await fromLoader({ type: 'visibility', open: true })
+    expect(await screen.findByText('Comparing plans?')).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('How can we help you?'), 'Is there a yearly plan?')
+    await userEvent.click(sendButton())
+    await vi.waitFor(() =>
+      expect(createConversation).toHaveBeenCalledWith(expect.objectContaining({ proactive_message_id: 'p1' })),
+    )
+    posted.mockRestore()
+  })
+})
+
+describe('widget display rules', () => {
+  const fromLoader = (data: Record<string, unknown>) =>
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'chatliox-loader', ...data }, source: window })) })
+  const displayed = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.map(([data]) => data as { type?: string; visible?: boolean }).filter((d) => d.type === 'display').map((d) => d.visible)
+
+  it('tells the loader whether to show the launcher on each page', async () => {
+    const posted = vi.spyOn(window, 'postMessage')
+    vi.mocked(getWidgetConfig).mockResolvedValue(config({ widget_hidden_paths: ['/checkout'] }))
+    renderAt(<WidgetPage />, `/widget?key=${KEY}&embed=1`)
+    await vi.waitFor(() => expect(getWidgetConfig).toHaveBeenCalled())
+
+    await fromLoader({ type: 'page', url: 'https://shop.test/checkout', title: 'Checkout' })
+    await vi.waitFor(() => expect(displayed(posted)).toEqual([false]))
+    await fromLoader({ type: 'page', url: 'https://shop.test/boots', title: 'Boots' })
+    await vi.waitFor(() => expect(displayed(posted)).toEqual([false, true]))
+    posted.mockRestore()
   })
 })

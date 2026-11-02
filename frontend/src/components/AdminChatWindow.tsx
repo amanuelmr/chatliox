@@ -5,6 +5,7 @@ import { emailTranscript, getConversations, updateConversationStatus, updateConv
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
+import { addIncoming, confirmSent } from '@/lib/messages'
 import { listNames } from '@/lib/teammates'
 import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
@@ -63,6 +64,10 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   })
   const conv = conversations.find((c) => c.id === conversationId)
   const resolved = conv?.status === 'closed'
+  // The proactive message the visitor answered by starting this chat, if any.
+  const invite = conv?.proactive_message_id
+    ? user?.organization.proactive_messages?.find((m) => m.id === conv.proactive_message_id)
+    : undefined
   const { data: liveVisitors = [] } = useLiveVisitors()
   const live = conv && liveVisitors.find((v) => v.visitor_id === conv.visitor_id)
   const livePage = live?.pages[live.pages.length - 1]
@@ -82,9 +87,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
 
   const appendMsg = useCallback((msg: Message) => {
     queryClient.setQueryData<Message[]>(['messages', conversationId], (prev = []) =>
-      prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+      addIncoming(prev, msg, (m) => m.sender_id === user?.id)
     )
-  }, [queryClient, conversationId])
+  }, [queryClient, conversationId, user?.id])
 
   useEffect(() => {
     clearPresence()
@@ -160,7 +165,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     onSuccess: (real, _, ctx) => {
       queryClient.setQueryData<Message[]>(
         ['messages', conversationId],
-        (msgs = []) => msgs.map((m) => (m.id === ctx?.tempId ? real : m)),
+        (msgs = []) => confirmSent(msgs, ctx?.tempId, real),
       )
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
     },
@@ -555,6 +560,13 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
               </div>
             )}
             <Field label="Email" value={conv?.visitor_email ?? '—'} />
+            {conv?.proactive_message_id && (
+              <Field label="Started from" value={
+                <p className="text-xs text-zinc-700">
+                  {invite ? <>Your proactive message <q className="italic">{invite.message}</q></> : 'A proactive message you have since deleted'}
+                </p>
+              } />
+            )}
             {conv?.visitor_user_agent && (
               <Field label="Browser" value={describeBrowser(conv.visitor_user_agent) ?? 'Unknown'} />
             )}
