@@ -89,6 +89,9 @@ async def create(
         visitor_pages=live.pages if live else None,
         visitor_user_agent=user_agent[:512] if user_agent else None,
         visitor_referrer=live.referrer if live else None,
+        proactive_message_id=body.proactive_message_id
+        if any(m["id"] == body.proactive_message_id for m in org.proactive_messages)
+        else None,
     )
     await ws_manager.broadcast(
         org_room(org.id),

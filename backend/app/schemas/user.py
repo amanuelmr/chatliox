@@ -30,6 +30,12 @@ class OrganizationInfo(BaseModel):
     auto_assign: bool
     first_response_minutes: int | None
     typing_preview: bool
+    welcome_messages: list[str]
+    quick_replies: list[str]
+    proactive_messages: list[dict]
+    widget_devices: str
+    widget_hidden_paths: list[str]
+    widget_allowed_domains: list[str]
 
 
 class UserResponse(BaseModel):

@@ -3,14 +3,20 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_email_configured, require_verified_user
 from app.core.email import send_invite_email
+from app.models.conversation import Conversation
 from app.models.user import User, UserRole
 from app.schemas.user import MemberResponse, OrganizationInfo, TeammateResponse
 from app.schemas.widget import (
+    ProactiveMessageStats,
+    UpdateDisplayRulesRequest,
+    UpdateProactiveMessagesRequest,
+    UpdateWelcomeRequest,
     UpdateBusinessHoursRequest,
     UpdatePreChatFormRequest,
     UpdateWidgetConfigRequest,
@@ -23,6 +29,7 @@ from app.services.organization import (
     rotate_invite_token,
     update_auto_assign,
     update_response_target,
+    update_organization,
     update_typing_preview,
     update_business_hours,
     update_pre_chat_form,
@@ -271,6 +278,64 @@ async def set_response_target(
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org
+
+
+async def _save(db: AsyncSession, user: User, values: dict) -> OrganizationInfo:
+    org = await update_organization(db, user.organization_id, values)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+@router.put("/welcome", response_model=OrganizationInfo)
+async def set_welcome(
+    body: UpdateWelcomeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    return await _save(db, current_user, body.model_dump())
+
+
+@router.put("/proactive-messages", response_model=OrganizationInfo)
+async def set_proactive_messages(
+    body: UpdateProactiveMessagesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    # New messages get an id, which chats started from them refer back to.
+    messages, seen = [], set()
+    for message in body.proactive_messages:
+        if message.id is None or message.id in seen:
+            message.id = uuid.uuid4().hex[:8]
+        seen.add(message.id)
+        messages.append(message.model_dump())
+    return await _save(db, current_user, {"proactive_messages": messages})
+
+
+@router.get("/proactive-messages/stats", response_model=list[ProactiveMessageStats])
+async def proactive_message_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_verified_user),
+) -> list[ProactiveMessageStats]:
+    """How many chats each proactive message has started."""
+    rows = await db.execute(
+        select(Conversation.proactive_message_id, func.count())
+        .where(
+            Conversation.organization_id == current_user.organization_id,
+            Conversation.proactive_message_id.is_not(None),
+        )
+        .group_by(Conversation.proactive_message_id)
+    )
+    return [ProactiveMessageStats(id=id_, chats=count) for id_, count in rows.all()]
+
+
+@router.put("/display-rules", response_model=OrganizationInfo)
+async def set_display_rules(
+    body: UpdateDisplayRulesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    return await _save(db, current_user, body.model_dump())
 
 
 @router.get("/widget/{widget_key}", response_model=WidgetConfigResponse)

@@ -16,6 +16,8 @@ class CreateConversationRequest(BaseModel):
     pre_chat_answers: dict[str, Annotated[str, StringConstraints(max_length=500)]] = Field(
         default_factory=dict, max_length=5
     )
+    # Set when the visitor is answering one of the team's proactive messages.
+    proactive_message_id: str | None = Field(default=None, max_length=8)
 
 
 class UpdateConversationStatusRequest(BaseModel):
@@ -62,3 +64,4 @@ class ConversationResponse(BaseModel):
     visitor_pages: list[dict] = []
     visitor_user_agent: str | None = None
     visitor_referrer: str | None = None
+    proactive_message_id: str | None = None

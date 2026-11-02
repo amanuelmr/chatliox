@@ -80,6 +80,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     # The site that sent the visitor here, when the browser shared it.
     visitor_referrer: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
+    # The proactive message the visitor answered by starting this chat, if any.
+    proactive_message_id: Mapped[str | None] = mapped_column(String(8), nullable=True)
+
     # 1-5, set by the visitor after a conversation is resolved.
     csat_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

@@ -1,7 +1,15 @@
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 HexColor = Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]
 GreetingStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=280)]
@@ -10,6 +18,33 @@ WidgetPosition = Literal["left", "right"]
 ClockTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 FieldRequirement = Literal["hidden", "optional", "required"]
 ShortLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+WelcomeText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+QuickReply = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+PagePattern = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+WidgetDevices = Literal["all", "desktop", "mobile"]
+
+
+def _normalize_domain(value: object) -> object:
+    """Accepts what people paste: "https://www.Shop.com/pricing" becomes "shop.com"."""
+    if not isinstance(value, str):
+        return value
+    domain = value.strip().lower()
+    domain = domain.split("://", 1)[-1].split("/", 1)[0]
+    for prefix in ("*.", "www."):
+        domain = domain.removeprefix(prefix)
+    return domain
+
+
+# A host name, optionally with a port for local testing. Subdomains are allowed too.
+Domain = Annotated[
+    str,
+    BeforeValidator(_normalize_domain),
+    StringConstraints(max_length=253, pattern=r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$"),
+]
+
+
+def _unique(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(values))
 
 
 class WidgetConfigResponse(BaseModel):
@@ -32,6 +67,18 @@ class WidgetConfigResponse(BaseModel):
     first_response_minutes: int | None
     # When false the widget keeps the visitor's draft to itself.
     typing_preview: bool
+    welcome_messages: list[str]
+    quick_replies: list[str]
+    proactive_messages: list[dict]
+    widget_devices: WidgetDevices
+    widget_hidden_paths: list[str]
+    widget_allowed_domains: list[str]
+
+    @field_validator("proactive_messages")
+    @classmethod
+    def only_enabled(cls, value: list[dict]) -> list[dict]:
+        # Visitors only need the invitations that can actually show.
+        return [m for m in value if m.get("enabled", True)]
     # Computed per request from the org's schedule; always true when the schedule is off.
     is_online: bool = True
 
@@ -108,3 +155,47 @@ class UpdatePreChatFormRequest(BaseModel):
         if len(set(labels)) != len(labels):
             raise ValueError("Each question needs a different label")
         return self
+
+
+class UpdateWelcomeRequest(BaseModel):
+    welcome_messages: list[WelcomeText] = Field(default_factory=list, max_length=3)
+    quick_replies: list[QuickReply] = Field(default_factory=list, max_length=4)
+
+    @field_validator("quick_replies")
+    @classmethod
+    def dedupe(cls, value: list[str]) -> list[str]:
+        return _unique(value)
+
+
+class ProactiveMessage(BaseModel):
+    # Left out for a new message; the server assigns one.
+    id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{8}$")] | None = None
+    message: WelcomeText
+    # Shown only on pages whose address contains this; empty means every page.
+    page_contains: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
+    delay_seconds: int = Field(default=10, ge=0, le=600)
+    # Only from the visitor's nth visit on, e.g. 2 for returning visitors.
+    min_visits: int = Field(default=1, ge=1, le=50)
+    # "once" per visitor, or again on every new visit.
+    frequency: Literal["once", "every_visit"] = "once"
+    enabled: bool = True
+
+
+class UpdateProactiveMessagesRequest(BaseModel):
+    proactive_messages: list[ProactiveMessage] = Field(default_factory=list, max_length=5)
+
+
+class ProactiveMessageStats(BaseModel):
+    id: str
+    chats: int
+
+
+class UpdateDisplayRulesRequest(BaseModel):
+    widget_devices: WidgetDevices = "all"
+    widget_hidden_paths: list[PagePattern] = Field(default_factory=list, max_length=10)
+    widget_allowed_domains: list[Domain] = Field(default_factory=list, max_length=10)
+
+    @field_validator("widget_hidden_paths", "widget_allowed_domains")
+    @classmethod
+    def dedupe(cls, value: list[str]) -> list[str]:
+        return _unique(value)
