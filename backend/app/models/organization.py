@@ -68,6 +68,8 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     auto_assign: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     # How soon a waiting chat should get its first reply. None means no target.
     first_response_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Show agents what the visitor is typing before they send it.
+    typing_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(

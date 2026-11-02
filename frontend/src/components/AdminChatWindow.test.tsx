@@ -37,8 +37,8 @@ const ME = { user_id: 'me', name: 'Wes' }
 const SAM = { user_id: 'sam', name: 'Sam' }
 
 const emit = (event: WsEvent) => act(() => FakeSocket.latest.onmessage?.({ data: JSON.stringify(event) }))
-const typing = (user_id: string, sender_type: 'admin' | 'visitor', name: string | null, is_typing = true) =>
-  emit({ type: 'typing', user_id, sender_type, name, is_typing })
+const typing = (user_id: string, sender_type: 'admin' | 'visitor', name: string | null, is_typing = true, draft?: string) =>
+  emit({ type: 'typing', user_id, sender_type, name, is_typing, draft })
 
 const macro = (id: string, title: string, shortcut: string, content: string, patch: Partial<CannedResponse> = {}) =>
   ({
@@ -93,6 +93,21 @@ describe('agent chat window', () => {
     await emit({ type: 'viewers', agents: [ME] })
     expect(screen.queryByText(/typing a reply/)).not.toBeInTheDocument()
     expect(screen.getByText('Visitor is typing…')).toBeInTheDocument()
+  })
+
+  it('previews what the visitor is typing until they stop', async () => {
+    await typing('visitor-1', 'visitor', null, true, 'My order still hasn')
+    expect(screen.getByText('Typing preview')).toBeInTheDocument()
+    expect(screen.getByText('My order still hasn')).toBeInTheDocument()
+
+    // Clearing the box keeps the indicator but drops the preview.
+    await typing('visitor-1', 'visitor', null, true)
+    expect(screen.queryByText('Typing preview')).not.toBeInTheDocument()
+    expect(screen.getByText('Visitor is typing…')).toBeInTheDocument()
+
+    await typing('visitor-1', 'visitor', null, true, 'Where is it?')
+    await typing('visitor-1', 'visitor', null, false)
+    expect(screen.queryByText('Where is it?')).not.toBeInTheDocument()
   })
 })
 

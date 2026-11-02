@@ -182,6 +182,7 @@ export default function WidgetPage() {
           brandColor={brandColor}
           onIncomingAdminMessage={handleIncomingAdminMessage}
           isOnline={isOnline}
+          shareDraft={widgetConfig?.typing_preview ?? false}
         />
       ) : (
         <WelcomeView
@@ -446,9 +447,11 @@ interface ChatViewProps {
   brandColor: string
   onIncomingAdminMessage: () => void
   isOnline: boolean
+  // Lets the team see the message as it's typed (the org's typing preview setting).
+  shareDraft: boolean
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -535,15 +538,16 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     }
   }, [conversationId, visitorId, appendMessage, onIncomingAdminMessage])
 
-  const sendTyping = useCallback((isTyping: boolean) => {
+  const sendTyping = useCallback((isTyping: boolean, draft = '') => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'typing', is_typing: isTyping }))
+      const event = shareDraft && isTyping ? { type: 'typing', is_typing: true, draft } : { type: 'typing', is_typing: isTyping }
+      wsRef.current.send(JSON.stringify(event))
     }
-  }, [])
+  }, [shareDraft])
 
   const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value)
-    sendTyping(true)
+    sendTyping(true, e.target.value)
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
     typingTimerRef.current = setTimeout(() => sendTyping(false), 2_000)
   }

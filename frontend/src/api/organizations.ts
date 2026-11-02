@@ -26,6 +26,7 @@ export interface WidgetConfig {
   pre_chat_email: FieldRequirement
   pre_chat_fields: PreChatField[]
   first_response_minutes: number | null
+  typing_preview: boolean
   is_online: boolean
 }
 
@@ -83,6 +84,9 @@ export const updatePreChatForm = (data: UpdatePreChatFormRequest): Promise<Organ
 
 export const updateAutoAssign = (autoAssign: boolean): Promise<Organization> =>
   client.put<Organization>('/organizations/auto-assign', { auto_assign: autoAssign }).then((r) => r.data)
+
+export const updateTypingPreview = (enabled: boolean): Promise<Organization> =>
+  client.put<Organization>('/organizations/typing-preview', { typing_preview: enabled }).then((r) => r.data)
 
 export const updateResponseTarget = (minutes: number | null): Promise<Organization> =>
   client.put<Organization>('/organizations/response-target', { first_response_minutes: minutes }).then((r) => r.data)

@@ -24,6 +24,7 @@ The project includes:
 - Team invites and role-based access
 - Optional auto-assignment: new chats are handed out in turn to teammates who have the dashboard open
 - Collision detection: agents see which teammates have the same chat open and when one of them is typing a reply
+- Typing preview: agents see what a visitor is typing before they send it; admins can turn it off
 - Chat transfers: take, hand over or release a chat with an optional note for the team, and filter the inbox to your own or unassigned chats
 - A first-response target: waiting chats count down to it in the inbox, the widget shows visitors the expected reply time, and analytics reports how often it was met
 - Saved replies and macros: type `/` and a shortcut in the reply box; a saved reply can also tag, assign and resolve the chat in the same step

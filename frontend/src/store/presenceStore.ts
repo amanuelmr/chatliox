@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Viewer, WsTypingEvent } from '@/types/chat'
 
-type Typist = Pick<WsTypingEvent, 'sender_type' | 'name'>
+type Typist = Pick<WsTypingEvent, 'sender_type' | 'name' | 'draft'>
 
 interface PresenceState {
   onlineUsers: Set<string>
@@ -31,11 +31,11 @@ export const usePresenceStore = create<PresenceState>()((set) => ({
       return { onlineUsers: next }
     }),
 
-  setTyping: ({ user_id, sender_type, name, is_typing }) =>
+  setTyping: ({ user_id, sender_type, name, is_typing, draft }) =>
     set((s) => {
       const next = new Map(s.typing)
       const key = user_id ?? 'visitor'
-      is_typing ? next.set(key, { sender_type, name }) : next.delete(key)
+      is_typing ? next.set(key, { sender_type, name, draft }) : next.delete(key)
       return { typing: next }
     }),
 

@@ -8,11 +8,14 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.core.ws_manager import manager
 from app.services.conversation import get_conversation, touch_visitor_last_seen
+from app.services.organization import get_organization_by_id
 from app.services.user import get_user_by_id
 
 router = APIRouter()
 
 _POLICY_VIOLATION = 1008  # RFC 6455 — used to signal auth/authz failures
+# Longest visitor draft passed on to agents as a typing preview.
+_MAX_DRAFT = 1000
 
 
 def org_room(organization_id: _uuid.UUID | str) -> str:
@@ -138,6 +141,10 @@ async def conversation_ws(
 
     # ── 3. Join room and announce presence ────────────────────────────────────
     is_visitor = token is None
+    # Read once per connection; the widget also stops sending drafts once its
+    # config refresh sees the setting turned off.
+    org = await get_organization_by_id(db, conv.organization_id) if is_visitor else None
+    share_drafts = org is not None and org.typing_preview
     manager.add_connection(conversation_id, websocket)
     if is_visitor:
         manager.visitor_connected(conversation_id)
@@ -161,17 +168,22 @@ async def conversation_ws(
                 continue
 
             if event.get("type") == "typing":
-                await manager.broadcast_except(
-                    conversation_id,
-                    {
-                        "type": "typing",
-                        "user_id": effective_user_id,
-                        "sender_type": "visitor" if is_visitor else "admin",
-                        "name": agent_name,
-                        "is_typing": bool(event.get("is_typing", False)),
-                    },
-                    exclude=websocket,
-                )
+                is_typing = bool(event.get("is_typing", False))
+                typing = {
+                    "type": "typing",
+                    "user_id": effective_user_id,
+                    "sender_type": "visitor" if is_visitor else "admin",
+                    "name": agent_name,
+                    "is_typing": is_typing,
+                }
+                if not is_visitor:
+                    await manager.broadcast_except(conversation_id, typing, exclude=websocket)
+                    continue
+                draft = event.get("draft")
+                if share_drafts and is_typing and isinstance(draft, str) and draft.strip():
+                    typing["draft"] = draft[:_MAX_DRAFT]
+                # The draft is for the team only, so this never goes to the visitor's other tabs.
+                await manager.broadcast_to_agents(conversation_id, typing)
 
     except WebSocketDisconnect:
         pass

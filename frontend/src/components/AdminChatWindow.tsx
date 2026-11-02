@@ -34,7 +34,10 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   const user  = useAuthStore((s) => s.user)
   const { setOnline, setOffline, setTyping, setViewers, typing, viewers, clear: clearPresence } = usePresenceStore()
   const otherViewers = viewers.filter((v) => v.user_id !== user?.id).map((v) => v.name)
-  const visitorTyping = [...typing.values()].some((t) => t.sender_type !== 'admin')
+  const visitor = [...typing.values()].find((t) => t.sender_type !== 'admin')
+  const visitorTyping = visitor !== undefined
+  const visitorDraft = visitor?.draft?.trim() ? visitor.draft : null
+  const hasDraft = visitorDraft !== null
   const teammatesTyping = [...typing]
     .filter(([id, t]) => t.sender_type === 'admin' && id !== user?.id)
     .map(([, t]) => t.name ?? 'A teammate')
@@ -63,12 +66,13 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     queryFn: () => getMessages(conversationId),
   })
 
+  // Also when a typing preview appears, so it isn't hidden below the fold.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 200)
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, hasDraft])
 
   const appendMsg = useCallback((msg: Message) => {
     queryClient.setQueryData<Message[]>(['messages', conversationId], (prev = []) =>
@@ -373,6 +377,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             <p className="text-center text-sm text-zinc-400 py-12">No messages yet.</p>
           )}
           {messages.map((m) => <Bubble key={m.id} message={m} />)}
+          {visitorDraft && !resolved && <DraftPreview draft={visitorDraft} />}
           {resolved && (
             <div className="flex items-center gap-3 py-2">
               <div className="flex-1 h-px bg-zinc-200" />
@@ -737,6 +742,18 @@ function Bubble({ message: m }: { message: Message }) {
         <p className={`text-[11px] mt-2 text-right ${isAdmin ? 'text-brand-100' : 'text-zinc-400'}`}>
           {isPending ? '···' : fmt(m.created_at)}
         </p>
+      </div>
+    </div>
+  )
+}
+
+// What the visitor is typing right now, before they send it. Only agents see this.
+function DraftPreview({ draft }: { draft: string }) {
+  return (
+    <div className="flex justify-start" aria-live="polite">
+      <div className="max-w-[72%] rounded-2xl px-4 py-3 bg-white/60 border border-dashed border-zinc-300 text-zinc-500">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Typing preview</p>
+        <p className="text-sm italic whitespace-pre-wrap break-words leading-relaxed">{draft}</p>
       </div>
     </div>
   )

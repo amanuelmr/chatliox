@@ -43,6 +43,8 @@ export type WsTypingEvent   = {
   // The agent's name; null for the visitor.
   name: string | null
   is_typing: boolean
+  // What the visitor has typed so far, when the team has typing preview on.
+  draft?: string
 }
 export type WsPresenceEvent = { type: 'presence'; user_id: string; status: 'online' | 'offline' }
 export type WsStatusEvent   = { type: 'status';   status: ConversationStatus }

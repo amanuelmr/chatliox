@@ -14,6 +14,7 @@ import {
   updateAutoAssign,
   updateBusinessHours,
   updateResponseTarget,
+  updateTypingPreview,
   updateMemberRole,
   updatePreChatForm,
   updateWidgetConfig,
@@ -25,6 +26,7 @@ import type {
   BusinessHoursDay,
   FieldRequirement,
   Member,
+  Organization,
   User,
   UserRole,
   WidgetPosition,
@@ -466,6 +468,7 @@ function SettingsView({
 
         {/* Chat assignment */}
         <AutoAssignCard user={user} token={token} setAuth={setAuth} />
+        <TypingPreviewCard user={user} token={token} setAuth={setAuth} />
 
         {/* First-response target */}
         <ResponseTargetCard user={user} token={token} setAuth={setAuth} />
@@ -981,19 +984,60 @@ function NumberField({
   )
 }
 
-function AutoAssignCard({
-  user,
-  token,
-  setAuth,
-}: {
+type OrgSettingProps = {
   user: User | null
   token: string | null
   setAuth: (token: string, user: User) => void
-}) {
-  const enabled = user?.organization.auto_assign ?? false
+}
 
+function AutoAssignCard({ user, token, setAuth }: OrgSettingProps) {
+  return (
+    <SwitchCard
+      title="Auto-assign new chats"
+      description="Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online, it stays unassigned until someone replies."
+      enabled={user?.organization.auto_assign ?? false}
+      update={updateAutoAssign}
+      errorText="Couldn't update auto-assignment. Please try again."
+      user={user}
+      token={token}
+      setAuth={setAuth}
+    />
+  )
+}
+
+function TypingPreviewCard({ user, token, setAuth }: OrgSettingProps) {
+  return (
+    <SwitchCard
+      title="Typing preview"
+      description="See what a visitor is typing before they press send, so you can start on the answer early. Only your team sees the preview."
+      enabled={user?.organization.typing_preview ?? true}
+      update={updateTypingPreview}
+      errorText="Couldn't update typing preview. Please try again."
+      user={user}
+      token={token}
+      setAuth={setAuth}
+    />
+  )
+}
+
+function SwitchCard({
+  title,
+  description,
+  enabled,
+  update,
+  errorText,
+  user,
+  token,
+  setAuth,
+}: OrgSettingProps & {
+  title: string
+  description: string
+  enabled: boolean
+  update: (enabled: boolean) => Promise<Organization>
+  errorText: string
+}) {
   const { mutate: toggle, isPending, error } = useMutation({
-    mutationFn: () => updateAutoAssign(!enabled),
+    mutationFn: () => update(!enabled),
     onSuccess: (updatedOrg) => {
       if (token && user) setAuth(token, { ...user, organization: updatedOrg })
     },
@@ -1003,17 +1047,14 @@ function AutoAssignCard({
     <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-zinc-900">Auto-assign new chats</p>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online,
-            it stays unassigned until someone replies.
-          </p>
+          <p className="text-sm font-semibold text-zinc-900">{title}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={enabled}
-          aria-label="Auto-assign new chats"
+          aria-label={title}
           disabled={isPending}
           onClick={() => toggle()}
           className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 disabled:opacity-50 ${
@@ -1027,7 +1068,7 @@ function AutoAssignCard({
           />
         </button>
       </div>
-      {error && <p className="text-xs text-red-500">Couldn't update auto-assignment. Please try again.</p>}
+      {error && <p className="text-xs text-red-500">{errorText}</p>}
     </div>
   )
 }

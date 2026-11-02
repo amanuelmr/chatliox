@@ -39,6 +39,7 @@ export interface Organization {
   pre_chat_fields: PreChatField[]
   auto_assign: boolean
   first_response_minutes: number | null
+  typing_preview: boolean
 }
 
 export type UserRole = 'admin' | 'agent'

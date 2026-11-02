@@ -23,6 +23,7 @@ from app.services.organization import (
     rotate_invite_token,
     update_auto_assign,
     update_response_target,
+    update_typing_preview,
     update_business_hours,
     update_pre_chat_form,
     update_widget_config,
@@ -234,6 +235,22 @@ async def set_auto_assign(
     current_user: User = Depends(require_admin),
 ) -> OrganizationInfo:
     org = await update_auto_assign(db, current_user.organization_id, body.auto_assign)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+class UpdateTypingPreviewRequest(BaseModel):
+    typing_preview: bool
+
+
+@router.put("/typing-preview", response_model=OrganizationInfo)
+async def set_typing_preview(
+    body: UpdateTypingPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_typing_preview(db, current_user.organization_id, body.typing_preview)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org
