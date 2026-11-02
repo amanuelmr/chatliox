@@ -19,6 +19,7 @@ import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/message
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
+import { confirmSent } from '@/lib/messages'
 import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
@@ -646,7 +647,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     onSuccess: (real, _, ctx) => {
       queryClient.setQueryData<Message[]>(
         ['widget-messages', conversationId],
-        (msgs = []) => msgs.map((m) => (m.id === ctx?.tempId ? real : m)),
+        (msgs = []) => confirmSent(msgs, ctx?.tempId, real),
       )
     },
     onError: (_, vars, ctx) => {

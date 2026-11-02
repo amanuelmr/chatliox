@@ -150,6 +150,26 @@ describe('visitor details', () => {
   })
 })
 
+describe('sending a reply', () => {
+  it('shows the reply once when the live update arrives before the send finishes', async () => {
+    let finish: (m: Message) => void = () => {}
+    vi.mocked(sendMessage).mockReset().mockReturnValue(new Promise<Message>((resolve) => { finish = resolve }))
+    await openChat()
+    await userEvent.type(screen.getByLabelText('Reply'), 'On its way!')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const saved = {
+      id: 'm1', conversation_id: 'c1', content: 'On its way!', sender_type: 'admin', sender_id: 'me', sender_name: 'Wes',
+      is_read: true, is_internal: false, created_at: new Date().toISOString(),
+      attachment_url: null, attachment_name: null, attachment_mime: null,
+    } as Message
+    await emit({ type: 'message', ...saved })
+    await act(async () => finish(saved))
+
+    expect(screen.getAllByText('On its way!')).toHaveLength(1)
+  })
+})
+
 describe('saved replies in the reply box', () => {
   beforeEach(async () => {
     vi.mocked(applyMacro).mockReset()

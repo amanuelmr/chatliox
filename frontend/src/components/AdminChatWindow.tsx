@@ -5,6 +5,7 @@ import { emailTranscript, getConversations, updateConversationStatus, updateConv
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
+import { confirmSent } from '@/lib/messages'
 import { listNames } from '@/lib/teammates'
 import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
@@ -164,7 +165,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     onSuccess: (real, _, ctx) => {
       queryClient.setQueryData<Message[]>(
         ['messages', conversationId],
-        (msgs = []) => msgs.map((m) => (m.id === ctx?.tempId ? real : m)),
+        (msgs = []) => confirmSent(msgs, ctx?.tempId, real),
       )
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
     },
