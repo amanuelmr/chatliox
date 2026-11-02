@@ -28,6 +28,7 @@ The project includes:
 - Chat transfers: take, hand over or release a chat with an optional note for the team, and filter the inbox to your own or unassigned chats
 - A first-response target: waiting chats count down to it in the inbox, the widget shows visitors the expected reply time, and analytics reports how often it was met
 - An Engage page with a live widget preview: welcome messages from the team and quick-reply buttons visitors can tap instead of typing
+- Proactive messages: the widget pops up a message from the team based on the page, time on page and visit count, with a once-per-visitor or once-per-visit limit, and counts the chats each one starts
 - Saved replies and macros: type `/` and a shortcut in the reply box; a saved reply can also tag, assign and resolve the chat in the same step
 - A live visitor list: who is on the site right now, which page they're on, how long they've been there and whether they have a chat
 - Visitor context: each chat shows the pages the visitor moved through, their browser and the site that sent them

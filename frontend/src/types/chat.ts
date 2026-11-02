@@ -21,6 +21,7 @@ export interface Conversation {
   visitor_pages: PageView[]
   visitor_user_agent: string | null
   visitor_referrer: string | null
+  proactive_message_id: string | null
 }
 
 export interface PageView {
@@ -70,6 +71,8 @@ export interface CreateConversationRequest {
   widget_key: string
   // Keyed by pre-chat question id.
   pre_chat_answers?: Record<string, string>
+  // The proactive message the visitor is answering, if any.
+  proactive_message_id?: string
 }
 
 export interface CreateMessageRequest {

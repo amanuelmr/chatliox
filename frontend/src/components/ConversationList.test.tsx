@@ -29,6 +29,7 @@ const chat = (id: string, patch: Partial<Conversation>): Conversation => ({
   visitor_pages: [],
   visitor_user_agent: null,
   visitor_referrer: null,
+  proactive_message_id: null,
   ...patch,
 })
 

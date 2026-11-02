@@ -170,10 +170,106 @@
     badge.style[other] = '-2px'
     badge.style[side] = ''
 
+    teaser.style.bottom = (offsetY + 56 + 12) + 'px'
+    teaser.style[side] = offsetX + 'px'
+    teaser.style[other] = ''
+
     renderBubbleIcon()
   }
 
+  // A proactive message from the team, shown above the launcher while the chat
+  // is closed. Clicking it opens the chat; the × dismisses it.
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  var teaser = document.createElement('div')
+  teaser.setAttribute('role', 'button')
+  teaser.setAttribute('tabindex', '0')
+  teaser.style.cssText = [
+    'position:fixed',
+    'box-sizing:border-box',
+    'width:280px',
+    'max-width:calc(100vw - 40px)',
+    'padding:14px 36px 14px 14px',
+    'display:none',
+    'gap:12px',
+    'align-items:flex-start',
+    'background:#fff',
+    'color:#27272a',
+    'border-radius:16px',
+    'box-shadow:0 12px 32px rgba(0,0,0,0.16),0 0 0 1px rgba(0,0,0,0.05)',
+    'font:14px/1.4 system-ui,-apple-system,sans-serif',
+    'cursor:pointer',
+    'z-index:2147483001',
+    'opacity:0',
+    'transform:translateY(8px)',
+    'transition:' + (reduceMotion ? 'none' : 'opacity 220ms ease,transform 220ms ease'),
+  ].join(';')
+
+  var teaserAvatar = document.createElement('span')
+  teaserAvatar.style.cssText =
+    'flex:none;width:32px;height:32px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px'
+  var teaserBody = document.createElement('span')
+  teaserBody.style.cssText = 'min-width:0;display:flex;flex-direction:column;gap:2px'
+  var teaserName = document.createElement('span')
+  teaserName.style.cssText = 'font-size:11px;color:#a1a1aa'
+  var teaserText = document.createElement('span')
+  teaserText.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere'
+  teaserBody.appendChild(teaserName)
+  teaserBody.appendChild(teaserText)
+
+  var teaserClose = document.createElement('button')
+  teaserClose.type = 'button'
+  teaserClose.setAttribute('aria-label', 'Dismiss message')
+  teaserClose.textContent = '\u00d7'
+  teaserClose.style.cssText =
+    'position:absolute;top:6px;right:6px;width:24px;height:24px;border:none;border-radius:50%;background:transparent;color:#a1a1aa;font-size:18px;line-height:1;cursor:pointer'
+
+  teaser.appendChild(teaserAvatar)
+  teaser.appendChild(teaserBody)
+  teaser.appendChild(teaserClose)
+  document.body.appendChild(teaser)
+
   applyLayout()
+
+  function showTeaser(data) {
+    if (isOpen || typeof data.text !== 'string') return
+    var name = typeof data.name === 'string' ? data.name : ''
+    teaserName.textContent = name
+    teaserAvatar.textContent = name ? name.charAt(0).toUpperCase() : ''
+    teaserAvatar.style.background = typeof data.color === 'string' ? data.color : brandColor
+    teaserText.textContent = data.text
+    teaser.setAttribute('aria-label', (name ? name + ': ' : '') + data.text)
+    teaser.style.display = 'flex'
+    // On the next frame, so the entrance transition runs.
+    requestAnimationFrame(function () {
+      teaser.style.opacity = '1'
+      teaser.style.transform = 'translateY(0)'
+    })
+    unreadCount = Math.max(unreadCount, 1)
+    updateBadge()
+  }
+
+  function hideTeaser() {
+    teaser.style.display = 'none'
+    teaser.style.opacity = '0'
+    teaser.style.transform = 'translateY(8px)'
+  }
+
+  teaser.addEventListener('click', function () {
+    setOpen(true)
+  })
+  teaser.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setOpen(true)
+    }
+  })
+  teaserClose.addEventListener('click', function (event) {
+    event.stopPropagation()
+    hideTeaser()
+    unreadCount = 0
+    updateBadge()
+    postToWidget({ type: 'teaser-dismissed' })
+  })
 
   function postToWidget(payload) {
     if (iframe.contentWindow) {
@@ -191,6 +287,7 @@
     if (next) {
       unreadCount = 0
       updateBadge()
+      hideTeaser()
     }
     postToWidget({ type: 'visibility', open: next })
   }
@@ -235,6 +332,8 @@
       applyLayout()
       widgetReady = true
       reportPage()
+    } else if (data.type === 'teaser') {
+      showTeaser(data)
     } else if (data.type === 'close') {
       setOpen(false)
     } else if (data.type === 'unread') {

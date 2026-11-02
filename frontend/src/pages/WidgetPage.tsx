@@ -23,6 +23,7 @@ import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
 import { useVisitorTracking } from '@/hooks/useVisitorTracking'
+import { useHostPage, useProactiveMessage } from '@/hooks/useProactiveMessage'
 import Spinner from '@/components/Spinner'
 import { QuickReplies, TeamBubbles } from '@/components/widget/WelcomeThread'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
@@ -95,6 +96,26 @@ export default function WidgetPage() {
   const greeting = widgetConfig?.widget_greeting ?? DEFAULT_GREETING
   const isOnline = widgetConfig?.is_online ?? true
   const awayMessage = widgetConfig?.away_message ?? ''
+  const teamName = widgetConfig?.name ?? 'Support'
+
+  // Invitations only go to visitors who haven't started a chat, while the team is in.
+  const hostPage = useHostPage(isEmbedded)
+  const { proactive, dismiss: dismissProactive } = useProactiveMessage(
+    widgetKey,
+    widgetConfig?.proactive_messages ?? [],
+    hostPage,
+    isEmbedded && !conversationId && !embeddedOpen && isOnline,
+  )
+
+  // The proactive message reads as the team's last greeting, before and after the chat starts.
+  const greetingBubbles = [...(widgetConfig?.welcome_messages ?? []), ...(proactive ? [proactive.message] : [])]
+
+  // The loader shows the invitation above the launcher while the chat is closed.
+  useEffect(() => {
+    if (proactive && !embeddedOpen) {
+      postToParent({ type: 'teaser', text: proactive.message, name: teamName, color: widgetConfig?.widget_color })
+    }
+  }, [proactive, embeddedOpen, teamName, widgetConfig?.widget_color])
 
   useEffect(() => {
     document.documentElement.style.background = 'transparent'
@@ -109,10 +130,11 @@ export default function WidgetPage() {
       const data = event.data as { source?: string; type?: string; open?: boolean } | null
       if (!data || data.source !== LOADER_MSG_SOURCE) return
       if (data.type === 'visibility') setEmbeddedOpen(Boolean(data.open))
+      else if (data.type === 'teaser-dismissed') dismissProactive()
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
-  }, [isEmbedded])
+  }, [isEmbedded, dismissProactive])
 
   // Tell the loader script we're ready and hand it the org's widget layout so the
   // launcher bubble/iframe match dashboard settings without any script-tag config.
@@ -183,8 +205,8 @@ export default function WidgetPage() {
           onIncomingAdminMessage={handleIncomingAdminMessage}
           isOnline={isOnline}
           shareDraft={widgetConfig?.typing_preview ?? false}
-          teamName={widgetConfig?.name ?? 'Support'}
-          welcomeMessages={widgetConfig?.welcome_messages ?? []}
+          teamName={teamName}
+          welcomeMessages={greetingBubbles}
         />
       ) : (
         <WelcomeView
@@ -197,9 +219,10 @@ export default function WidgetPage() {
           nameRequirement={widgetConfig?.pre_chat_name ?? 'optional'}
           emailRequirement={widgetConfig?.pre_chat_email ?? 'optional'}
           questions={widgetConfig?.pre_chat_fields ?? []}
-          teamName={widgetConfig?.name ?? 'Support'}
-          welcomeMessages={widgetConfig?.welcome_messages ?? []}
+          teamName={teamName}
+          welcomeMessages={greetingBubbles}
           quickReplies={widgetConfig?.quick_replies ?? []}
+          proactiveMessageId={proactive?.id}
         />
       )}
     </div>
@@ -298,6 +321,8 @@ interface WelcomeViewProps {
   teamName: string
   welcomeMessages: string[]
   quickReplies: string[]
+  // Set when the visitor opened the chat from a proactive message.
+  proactiveMessageId?: string
 }
 
 const INPUT_CLASS =
@@ -316,6 +341,7 @@ function WelcomeView({
   teamName,
   welcomeMessages,
   quickReplies,
+  proactiveMessageId,
 }: WelcomeViewProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -345,6 +371,7 @@ function WelcomeView({
         pre_chat_answers: Object.fromEntries(
           questions.filter(answered).map((q) => [q.id, answers[q.id].trim()]),
         ),
+        proactive_message_id: proactiveMessageId,
       })
       if (message.trim()) {
         await sendMessage({

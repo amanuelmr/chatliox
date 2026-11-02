@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -236,5 +236,47 @@ describe('widget welcome', () => {
     await userEvent.type(screen.getByPlaceholderText('Your name'), 'Vi')
     await userEvent.click(sendButton())
     await vi.waitFor(() => expect(createConversation).toHaveBeenCalled())
+  })
+})
+
+describe('widget proactive message', () => {
+  const LOADER = 'chatliox-loader'
+  const fromLoader = (data: Record<string, unknown>) =>
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: LOADER, ...data }, source: window })) })
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.mocked(createConversation).mockReset().mockResolvedValue({ id: 'c1' } as Conversation)
+    vi.mocked(sendMessage).mockReset().mockResolvedValue({} as Message)
+    vi.mocked(getVisitorMessages).mockResolvedValue([])
+    vi.mocked(getVisitorConversationStatus).mockResolvedValue({ status: 'waiting', has_email: false })
+  })
+
+  it('pops up on a matching page, then credits the chat it starts', async () => {
+    const posted = vi.spyOn(window, 'postMessage')
+    vi.mocked(getWidgetConfig).mockResolvedValue(config({
+      proactive_messages: [
+        { id: 'p1', message: 'Comparing plans?', page_contains: '/pricing', delay_seconds: 0, min_visits: 1, frequency: 'once', enabled: true },
+      ],
+    }))
+    renderAt(<WidgetPage />, `/widget?key=${KEY}&embed=1`)
+    await vi.waitFor(() => expect(getWidgetConfig).toHaveBeenCalled())
+
+    await fromLoader({ type: 'page', url: 'https://shop.test/blog', title: 'Blog' })
+    await fromLoader({ type: 'page', url: 'https://shop.test/pricing', title: 'Pricing' })
+    await vi.waitFor(() =>
+      expect(posted).toHaveBeenCalledWith(expect.objectContaining({ type: 'teaser', text: 'Comparing plans?' }), '*'),
+    )
+    expect(posted.mock.calls.filter(([data]) => (data as { type?: string }).type === 'teaser')).toHaveLength(1)
+
+    // The visitor clicks it: the loader opens the chat, which leads with the message.
+    await fromLoader({ type: 'visibility', open: true })
+    expect(await screen.findByText('Comparing plans?')).toBeInTheDocument()
+    await userEvent.type(screen.getByPlaceholderText('How can we help you?'), 'Is there a yearly plan?')
+    await userEvent.click(sendButton())
+    await vi.waitFor(() =>
+      expect(createConversation).toHaveBeenCalledWith(expect.objectContaining({ proactive_message_id: 'p1' })),
+    )
+    posted.mockRestore()
   })
 })

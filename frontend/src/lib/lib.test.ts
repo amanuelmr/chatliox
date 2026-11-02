@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
 import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
+import { NEW_PROACTIVE, describeTrigger, dueProactive, recordVisit, type VisitHistory } from './engage'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
 import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
+import type { ProactiveMessage } from '@/types/auth'
 
 function axiosError(status: number, data: unknown) {
   const config = { headers: new AxiosHeaders() }
@@ -174,5 +176,42 @@ describe('visitor details', () => {
     expect(pageLabel({ url: 'https://shop.test/boots', title: 'Boots', at: '' })).toBe('Boots')
     expect(siteName('https://www.search.test/?q=1')).toBe('search.test')
     expect(siteName('not a url')).toBe('not a url')
+  })
+})
+
+describe('proactive messages', () => {
+  const msg = (patch: Partial<ProactiveMessage>): ProactiveMessage => ({ ...NEW_PROACTIVE, id: 'p1', message: 'Hi', ...patch })
+  const at = (visits: number, shown: Record<string, number> = {}): VisitHistory => ({ visits, lastSeen: 0, shown })
+
+  it('counts a new visit after half an hour away', () => {
+    const first = recordVisit(null, 0)
+    expect(first.visits).toBe(1)
+    expect(recordVisit(first, 29 * 60_000).visits).toBe(1)
+    expect(recordVisit(first, 31 * 60_000).visits).toBe(2)
+  })
+
+  it('waits for the page, the delay and the visit count', () => {
+    const pricing = msg({ page_contains: '/Pricing', delay_seconds: 10, min_visits: 2 })
+    const ctx = { url: 'https://shop.test/pricing?plan=pro', secondsOnPage: 10, history: at(2) }
+    expect(dueProactive([pricing], ctx)).toBe(pricing)
+    expect(dueProactive([pricing], { ...ctx, url: 'https://shop.test/blog' })).toBeNull()
+    expect(dueProactive([pricing], { ...ctx, secondsOnPage: 9 })).toBeNull()
+    expect(dueProactive([pricing], { ...ctx, history: at(1) })).toBeNull()
+    expect(dueProactive([{ ...pricing, enabled: false }], ctx)).toBeNull()
+  })
+
+  it('shows once per visitor or once every visit', () => {
+    const ctx = { url: 'https://shop.test/', secondsOnPage: 60 }
+    expect(dueProactive([msg({ frequency: 'once' })], { ...ctx, history: at(3, { p1: 1 }) })).toBeNull()
+    expect(dueProactive([msg({ frequency: 'every_visit' })], { ...ctx, history: at(3, { p1: 3 }) })).toBeNull()
+    expect(dueProactive([msg({ frequency: 'every_visit' })], { ...ctx, history: at(3, { p1: 2 }) })).not.toBeNull()
+  })
+
+  it('describes when a message shows in plain words', () => {
+    expect(describeTrigger(msg({ page_contains: '/pricing', delay_seconds: 10, min_visits: 2 }))).toBe(
+      'On pages containing /pricing, after 10 seconds, from the 2nd visit. Once per visitor.',
+    )
+    expect(describeTrigger(msg({ delay_seconds: 0, frequency: 'every_visit' }))).toBe('On any page, right away. Once every visit.')
+    expect(describeTrigger(msg({ delay_seconds: 1, min_visits: 3 }))).toBe('On any page, after 1 second, from the 3rd visit. Once per visitor.')
   })
 })

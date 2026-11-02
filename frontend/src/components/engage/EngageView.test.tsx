@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { updateWelcome } from '@/api/organizations'
+import { getProactiveStats, updateProactiveMessages, updateWelcome } from '@/api/organizations'
 import { useAuthStore } from '@/store/authStore'
 import { renderAt } from '@/test/render'
 import type { Organization, User } from '@/types/auth'
@@ -74,5 +74,51 @@ describe('engage: welcome', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect(preview().getByText('Hi there!')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+})
+
+describe('engage: proactive messages', () => {
+  const saved = {
+    id: 'p1', message: 'Comparing plans?', page_contains: '/pricing', delay_seconds: 10,
+    min_visits: 1, frequency: 'once' as const, enabled: true,
+  }
+
+  beforeEach(() => {
+    vi.mocked(updateProactiveMessages).mockReset()
+    vi.mocked(getProactiveStats).mockResolvedValue([{ id: 'p1', chats: 3 }])
+    signIn({ proactive_messages: [saved] })
+  })
+
+  it('previews the selected message as a pop-up on a matching page, with its results', async () => {
+    renderAt(<EngageView />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Proactive messages' }))
+
+    expect(preview().getByText('https://bootshop.com/pricing')).toBeInTheDocument()
+    expect(preview().getByText('Comparing plans?')).toBeInTheDocument()
+    expect(await screen.findByText('3 chats started')).toBeInTheDocument()
+    expect(screen.getByText('On pages containing /pricing, after 10 seconds. Once per visitor.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Show message 1' }))
+    expect(preview().queryByText('Comparing plans?')).not.toBeInTheDocument()
+    expect(screen.getByText("This message is switched off, so visitors won't see it.")).toBeInTheDocument()
+  })
+
+  it('adds a message, refusing to save it empty', async () => {
+    renderAt(<EngageView />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Proactive messages' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ Add a proactive message' }))
+    expect(screen.getByText('Each proactive message needs some text.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+
+    await userEvent.keyboard('Welcome back!')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How often message 2 shows' }), 'every_visit')
+    expect(preview().getByText('Welcome back!')).toBeInTheDocument()
+
+    vi.mocked(updateProactiveMessages).mockResolvedValue({ ...ORG, proactive_messages: [saved] })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(updateProactiveMessages).toHaveBeenCalledWith([
+      saved,
+      { message: 'Welcome back!', page_contains: '', delay_seconds: 10, min_visits: 1, frequency: 'every_visit', enabled: true },
+    ])
   })
 })
