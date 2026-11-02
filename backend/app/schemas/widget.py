@@ -30,6 +30,8 @@ class WidgetConfigResponse(BaseModel):
     pre_chat_email: FieldRequirement
     pre_chat_fields: list[dict]
     first_response_minutes: int | None
+    # When false the widget keeps the visitor's draft to itself.
+    typing_preview: bool
     # Computed per request from the org's schedule; always true when the schedule is off.
     is_online: bool = True
 

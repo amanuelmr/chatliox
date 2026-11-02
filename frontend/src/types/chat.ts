@@ -17,6 +17,16 @@ export interface Conversation {
   csat_rating: number | null
   // Answers to the org's custom pre-chat questions, as they were asked.
   pre_chat_answers: { label: string; value: string }[]
+  // The pages the visitor moved through while chatting, oldest first.
+  visitor_pages: PageView[]
+  visitor_user_agent: string | null
+  visitor_referrer: string | null
+}
+
+export interface PageView {
+  url: string
+  title: string
+  at: string
 }
 
 export interface Message {
@@ -43,6 +53,8 @@ export type WsTypingEvent   = {
   // The agent's name; null for the visitor.
   name: string | null
   is_typing: boolean
+  // What the visitor has typed so far, when the team has typing preview on.
+  draft?: string
 }
 export type WsPresenceEvent = { type: 'presence'; user_id: string; status: 'online' | 'offline' }
 export type WsStatusEvent   = { type: 'status';   status: ConversationStatus }

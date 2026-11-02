@@ -5,6 +5,7 @@ import AdminChatWindow from '@/components/AdminChatWindow'
 import ConversationList from '@/components/ConversationList'
 import SavedRepliesCard from '@/components/SavedRepliesCard'
 import Spinner from '@/components/Spinner'
+import VisitorsView, { useLiveVisitors } from '@/components/VisitorsView'
 import { getAnalyticsSummary } from '@/api/analytics'
 import {
   getMembers,
@@ -14,6 +15,7 @@ import {
   updateAutoAssign,
   updateBusinessHours,
   updateResponseTarget,
+  updateTypingPreview,
   updateMemberRole,
   updatePreChatForm,
   updateWidgetConfig,
@@ -25,12 +27,13 @@ import type {
   BusinessHoursDay,
   FieldRequirement,
   Member,
+  Organization,
   User,
   UserRole,
   WidgetPosition,
 } from '@/types/auth'
 
-type View = 'inbox' | 'analytics' | 'settings'
+type View = 'inbox' | 'visitors' | 'analytics' | 'settings'
 
 export default function AdminDashboard() {
   const { id } = useParams<{ id?: string }>()
@@ -44,6 +47,7 @@ export default function AdminDashboard() {
   const isAdmin = user?.role === 'admin'
 
   useDashboardSocket(token)
+  const { data: visitors = [] } = useLiveVisitors()
 
   const embedCode = user?.organization
     ? `<script src="${window.location.origin}/widget.js" data-widget-key="${user.organization.widget_key}" async><\/script>`
@@ -70,6 +74,17 @@ export default function AdminDashboard() {
           <NavBtn title="Inbox" active={view === 'inbox'} onClick={() => { setView('inbox'); navigate('/app') }}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
+            </svg>
+          </NavBtn>
+
+          <NavBtn
+            title={`Visitors on your site (${visitors.length})`}
+            active={view === 'visitors'}
+            onClick={() => setView('visitors')}
+            badge={visitors.length}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
             </svg>
           </NavBtn>
 
@@ -106,6 +121,8 @@ export default function AdminDashboard() {
         />
       ) : view === 'analytics' ? (
         <AnalyticsView />
+      ) : view === 'visitors' ? (
+        <VisitorsView onOpenChat={(cid) => { setView('inbox'); navigate(`/app/c/${cid}`) }} />
       ) : (
         <>
           {/* ── Inbox column ─────────────────────────────────────────────────── */}
@@ -466,6 +483,7 @@ function SettingsView({
 
         {/* Chat assignment */}
         <AutoAssignCard user={user} token={token} setAuth={setAuth} />
+        <TypingPreviewCard user={user} token={token} setAuth={setAuth} />
 
         {/* First-response target */}
         <ResponseTargetCard user={user} token={token} setAuth={setAuth} />
@@ -981,19 +999,60 @@ function NumberField({
   )
 }
 
-function AutoAssignCard({
-  user,
-  token,
-  setAuth,
-}: {
+type OrgSettingProps = {
   user: User | null
   token: string | null
   setAuth: (token: string, user: User) => void
-}) {
-  const enabled = user?.organization.auto_assign ?? false
+}
 
+function AutoAssignCard({ user, token, setAuth }: OrgSettingProps) {
+  return (
+    <SwitchCard
+      title="Auto-assign new chats"
+      description="Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online, it stays unassigned until someone replies."
+      enabled={user?.organization.auto_assign ?? false}
+      update={updateAutoAssign}
+      errorText="Couldn't update auto-assignment. Please try again."
+      user={user}
+      token={token}
+      setAuth={setAuth}
+    />
+  )
+}
+
+function TypingPreviewCard({ user, token, setAuth }: OrgSettingProps) {
+  return (
+    <SwitchCard
+      title="Typing preview"
+      description="See what a visitor is typing before they press send, so you can start on the answer early. Only your team sees the preview."
+      enabled={user?.organization.typing_preview ?? true}
+      update={updateTypingPreview}
+      errorText="Couldn't update typing preview. Please try again."
+      user={user}
+      token={token}
+      setAuth={setAuth}
+    />
+  )
+}
+
+function SwitchCard({
+  title,
+  description,
+  enabled,
+  update,
+  errorText,
+  user,
+  token,
+  setAuth,
+}: OrgSettingProps & {
+  title: string
+  description: string
+  enabled: boolean
+  update: (enabled: boolean) => Promise<Organization>
+  errorText: string
+}) {
   const { mutate: toggle, isPending, error } = useMutation({
-    mutationFn: () => updateAutoAssign(!enabled),
+    mutationFn: () => update(!enabled),
     onSuccess: (updatedOrg) => {
       if (token && user) setAuth(token, { ...user, organization: updatedOrg })
     },
@@ -1003,17 +1062,14 @@ function AutoAssignCard({
     <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-2">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-zinc-900">Auto-assign new chats</p>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online,
-            it stays unassigned until someone replies.
-          </p>
+          <p className="text-sm font-semibold text-zinc-900">{title}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={enabled}
-          aria-label="Auto-assign new chats"
+          aria-label={title}
           disabled={isPending}
           onClick={() => toggle()}
           className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 disabled:opacity-50 ${
@@ -1027,7 +1083,7 @@ function AutoAssignCard({
           />
         </button>
       </div>
-      {error && <p className="text-xs text-red-500">Couldn't update auto-assignment. Please try again.</p>}
+      {error && <p className="text-xs text-red-500">{errorText}</p>}
     </div>
   )
 }
@@ -1195,22 +1251,29 @@ function TeamMembersCard({ currentUserId }: { currentUserId: string }) {
 }
 
 function NavBtn({
-  children, title, onClick, active = false,
+  children, title, onClick, active = false, badge = 0,
 }: {
   children: React.ReactNode
   title: string
   onClick?: () => void
   active?: boolean
+  badge?: number
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+      aria-label={title}
+      className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
         active ? 'bg-brand-50 text-brand-600' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
       }`}
     >
       {children}
+      {badge > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-semibold leading-4 text-center tabular-nums">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   )
 }

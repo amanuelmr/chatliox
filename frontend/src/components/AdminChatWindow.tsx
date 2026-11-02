@@ -6,10 +6,13 @@ import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
 import { listNames } from '@/lib/teammates'
+import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import AssignMenu from '@/components/AssignMenu'
 import { MacroList, MacroPickerButton } from '@/components/MacroMenu'
+import PageTrail from '@/components/PageTrail'
+import { useLiveVisitors } from '@/components/VisitorsView'
 import Spinner from '@/components/Spinner'
 import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
@@ -34,7 +37,10 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   const user  = useAuthStore((s) => s.user)
   const { setOnline, setOffline, setTyping, setViewers, typing, viewers, clear: clearPresence } = usePresenceStore()
   const otherViewers = viewers.filter((v) => v.user_id !== user?.id).map((v) => v.name)
-  const visitorTyping = [...typing.values()].some((t) => t.sender_type !== 'admin')
+  const visitor = [...typing.values()].find((t) => t.sender_type !== 'admin')
+  const visitorTyping = visitor !== undefined
+  const visitorDraft = visitor?.draft?.trim() ? visitor.draft : null
+  const hasDraft = visitorDraft !== null
   const teammatesTyping = [...typing]
     .filter(([id, t]) => t.sender_type === 'admin' && id !== user?.id)
     .map(([, t]) => t.name ?? 'A teammate')
@@ -57,18 +63,22 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   })
   const conv = conversations.find((c) => c.id === conversationId)
   const resolved = conv?.status === 'closed'
+  const { data: liveVisitors = [] } = useLiveVisitors()
+  const live = conv && liveVisitors.find((v) => v.visitor_id === conv.visitor_id)
+  const livePage = live?.pages[live.pages.length - 1]
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['messages', conversationId],
     queryFn: () => getMessages(conversationId),
   })
 
+  // Also when a typing preview appears, so it isn't hidden below the fold.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 200)
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, hasDraft])
 
   const appendMsg = useCallback((msg: Message) => {
     queryClient.setQueryData<Message[]>(['messages', conversationId], (prev = []) =>
@@ -373,6 +383,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             <p className="text-center text-sm text-zinc-400 py-12">No messages yet.</p>
           )}
           {messages.map((m) => <Bubble key={m.id} message={m} />)}
+          {visitorDraft && !resolved && <DraftPreview draft={visitorDraft} />}
           {resolved && (
             <div className="flex items-center gap-3 py-2">
               <div className="flex-1 h-px bg-zinc-200" />
@@ -532,7 +543,34 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
               </p>
             </div>
 
+            {livePage && (
+              <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-2.5 py-2">
+                <span className="mt-1 w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" aria-hidden />
+                <p className="text-xs text-emerald-800 min-w-0">
+                  On the site now, viewing{' '}
+                  <a href={livePage.url} target="_blank" rel="noreferrer noopener" title={livePage.url} className="font-medium hover:underline break-words">
+                    {pageLabel(livePage)}
+                  </a>
+                </p>
+              </div>
+            )}
             <Field label="Email" value={conv?.visitor_email ?? '—'} />
+            {conv?.visitor_user_agent && (
+              <Field label="Browser" value={describeBrowser(conv.visitor_user_agent) ?? 'Unknown'} />
+            )}
+            {conv?.visitor_referrer && (
+              <Field label="Came from" value={
+                <a
+                  href={conv.visitor_referrer}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title={conv.visitor_referrer}
+                  className="text-xs text-brand-600 hover:underline break-all"
+                >
+                  {siteName(conv.visitor_referrer)}
+                </a>
+              } />
+            )}
             {conv?.pre_chat_answers.map((answer) => (
               <Field key={answer.label} label={answer.label} value={answer.value} />
             ))}
@@ -556,6 +594,8 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             )}
           </div>
         </div>
+
+        {conv && <PageTrail pages={conv.visitor_pages} />}
 
         {/* Tags */}
         <div className="bg-white rounded-xl shadow-sm ring-1 ring-zinc-200 overflow-hidden">
@@ -737,6 +777,18 @@ function Bubble({ message: m }: { message: Message }) {
         <p className={`text-[11px] mt-2 text-right ${isAdmin ? 'text-brand-100' : 'text-zinc-400'}`}>
           {isPending ? '···' : fmt(m.created_at)}
         </p>
+      </div>
+    </div>
+  )
+}
+
+// What the visitor is typing right now, before they send it. Only agents see this.
+function DraftPreview({ draft }: { draft: string }) {
+  return (
+    <div className="flex justify-start" aria-live="polite">
+      <div className="max-w-[72%] rounded-2xl px-4 py-3 bg-white/60 border border-dashed border-zinc-300 text-zinc-500">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">Typing preview</p>
+        <p className="text-sm italic whitespace-pre-wrap break-words leading-relaxed">{draft}</p>
       </div>
     </div>
   )

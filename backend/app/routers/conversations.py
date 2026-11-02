@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import require_email_configured, require_verified_user
 from app.core.limiter import limiter
+from app.core.visitor_tracker import visitor_tracker
 from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.user import User
@@ -74,6 +75,9 @@ async def create(
     assignee_id = (
         await pick_assignee(db, org.id, ws_manager.online_agent_ids()) if org.auto_assign else None
     )
+    # The widget has been reporting pages since it loaded, so the chat starts with them.
+    live = visitor_tracker.get(str(org.id), body.visitor_id)
+    user_agent = request.headers.get("user-agent")
     conversation = await create_conversation(
         db,
         body.visitor_id,
@@ -82,6 +86,9 @@ async def create(
         org.id,
         answers,
         assignee_id,
+        visitor_pages=live.pages if live else None,
+        visitor_user_agent=user_agent[:512] if user_agent else None,
+        visitor_referrer=live.referrer if live else None,
     )
     await ws_manager.broadcast(
         org_room(org.id),

@@ -139,6 +139,16 @@ async def update_auto_assign(db: AsyncSession, org_id: uuid.UUID, enabled: bool)
     return org
 
 
+async def update_typing_preview(db: AsyncSession, org_id: uuid.UUID, enabled: bool) -> Organization | None:
+    org = await get_organization_by_id(db, org_id)
+    if org is None:
+        return None
+    org.typing_preview = enabled
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
 async def update_response_target(db: AsyncSession, org_id: uuid.UUID, minutes: int | None) -> Organization | None:
     org = await get_organization_by_id(db, org_id)
     if org is None:

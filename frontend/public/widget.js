@@ -14,6 +14,9 @@
  *   window.chatlioxSettings = { widgetKey: '...', position: 'right' }
  *
  * Exposes window.chatliox = { open(), close(), toggle() } for programmatic control.
+ *
+ * The loader also tells the widget which page the visitor is on, including
+ * client-side navigation in single-page apps, so the team can see it in the dashboard.
  */
 (function () {
   if (window.chatliox && window.chatliox.__loaded) return
@@ -196,6 +199,21 @@
     setOpen(!isOpen)
   })
 
+  // Reports the current page once the widget is ready, then whenever the URL
+  // changes. pushState doesn't fire an event, so it's checked on a short timer.
+  var widgetReady = false
+  var reportedUrl = null
+
+  function reportPage() {
+    if (!widgetReady || location.href === reportedUrl) return
+    reportedUrl = location.href
+    postToWidget({ type: 'page', url: location.href, title: document.title, referrer: document.referrer })
+  }
+
+  window.addEventListener('popstate', reportPage)
+  window.addEventListener('hashchange', reportPage)
+  setInterval(reportPage, 1000)
+
   window.addEventListener('message', function (event) {
     if (event.origin !== FRONTEND_ORIGIN) return
     var data = event.data
@@ -215,6 +233,8 @@
       if (typeof data.offsetY === 'number' && data.offsetY >= 0) offsetY = data.offsetY
       iconUrl = data.iconUrl || null
       applyLayout()
+      widgetReady = true
+      reportPage()
     } else if (data.type === 'close') {
       setOpen(false)
     } else if (data.type === 'unread') {

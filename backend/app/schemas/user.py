@@ -29,6 +29,7 @@ class OrganizationInfo(BaseModel):
     pre_chat_fields: list[dict]
     auto_assign: bool
     first_response_minutes: int | None
+    typing_preview: bool
 
 
 class UserResponse(BaseModel):

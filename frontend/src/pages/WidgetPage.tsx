@@ -21,6 +21,8 @@ import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
 import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
+import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
+import { useVisitorTracking } from '@/hooks/useVisitorTracking'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 import type { FieldRequirement, PreChatField } from '@/types/auth'
@@ -58,11 +60,6 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// Messages exchanged with the host page when this widget is running inside the
-// loader script's iframe (frontend/public/widget.js). See that file for the other side.
-const WIDGET_MSG_SOURCE = 'chatliox-widget'
-const LOADER_MSG_SOURCE = 'chatliox-loader'
-
 function postToParent(payload: Record<string, unknown>) {
   window.parent.postMessage({ source: WIDGET_MSG_SOURCE, ...payload }, '*')
 }
@@ -83,6 +80,8 @@ export default function WidgetPage() {
   )
   const [adminName, setAdminName] = useState<string | null>(null)
   const [convStatus, setConvStatus] = useState<ConversationStatus | null>(null)
+
+  useVisitorTracking(widgetKey, visitorId, isEmbedded)
 
   const { data: widgetConfig } = useQuery({
     queryKey: ['widget-config', widgetKey],
@@ -182,6 +181,7 @@ export default function WidgetPage() {
           brandColor={brandColor}
           onIncomingAdminMessage={handleIncomingAdminMessage}
           isOnline={isOnline}
+          shareDraft={widgetConfig?.typing_preview ?? false}
         />
       ) : (
         <WelcomeView
@@ -446,9 +446,11 @@ interface ChatViewProps {
   brandColor: string
   onIncomingAdminMessage: () => void
   isOnline: boolean
+  // Lets the team see the message as it's typed (the org's typing preview setting).
+  shareDraft: boolean
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -535,15 +537,16 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
     }
   }, [conversationId, visitorId, appendMessage, onIncomingAdminMessage])
 
-  const sendTyping = useCallback((isTyping: boolean) => {
+  const sendTyping = useCallback((isTyping: boolean, draft = '') => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'typing', is_typing: isTyping }))
+      const event = shareDraft && isTyping ? { type: 'typing', is_typing: true, draft } : { type: 'typing', is_typing: isTyping }
+      wsRef.current.send(JSON.stringify(event))
     }
-  }, [])
+  }, [shareDraft])
 
   const handleContentChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value)
-    sendTyping(true)
+    sendTyping(true, e.target.value)
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
     typingTimerRef.current = setTimeout(() => sendTyping(false), 2_000)
   }

@@ -12,10 +12,11 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.email import email_configured
 from app.core.limiter import limiter
-from app.routers import analytics, auth, canned_responses, conversations, health, messages, organizations
+from app.routers import analytics, auth, canned_responses, conversations, health, messages, organizations, visitors
 from app.services.alerts import email_notification_loop
 from app.services.storage import MEDIA_ROOT
 from app.websockets import router as ws_router
+from app.websockets import visitors as visitor_ws
 
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,11 @@ app.include_router(auth.router)
 app.include_router(conversations.router)
 app.include_router(messages.router)
 app.include_router(ws_router.router)
+app.include_router(visitor_ws.router)
 app.include_router(organizations.router)
 app.include_router(canned_responses.router)
 app.include_router(analytics.router)
+app.include_router(visitors.router)
 
 # ── Attachment storage ──────────────────────────────────────────────────────────
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")

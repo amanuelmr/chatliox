@@ -71,6 +71,15 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
 
+    # The pages the visitor moved through while chatting, oldest first:
+    # [{"url", "title", "at"}], capped like the live visitor list.
+    visitor_pages: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    visitor_user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # The site that sent the visitor here, when the browser shared it.
+    visitor_referrer: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+
     # 1-5, set by the visitor after a conversation is resolved.
     csat_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

@@ -6,6 +6,7 @@ import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
+import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
 
 function axiosError(status: number, data: unknown) {
@@ -145,5 +146,33 @@ describe('saved reply helpers', () => {
 
   it('parses a tag list', () => {
     expect(parseTags(' refund, #billing,, refund ')).toEqual(['refund', 'billing'])
+  })
+})
+
+describe('visitor details', () => {
+  const UA = {
+    chromeMac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    edgeWindows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.2849.68',
+    safariIphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+    firefoxAndroid: 'Mozilla/5.0 (Android 15; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0',
+    chromeIphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.6723.90 Mobile/15E148 Safari/604.1',
+  }
+
+  it('names the browser and system from a user agent', () => {
+    expect(describeBrowser(UA.chromeMac)).toBe('Chrome 130 on macOS')
+    expect(describeBrowser(UA.edgeWindows)).toBe('Edge 130 on Windows')
+    expect(describeBrowser(UA.safariIphone)).toBe('Safari 18 on iOS')
+    expect(describeBrowser(UA.firefoxAndroid)).toBe('Firefox 132 on Android')
+    expect(describeBrowser(UA.chromeIphone)).toBe('Chrome 130 on iOS')
+    expect(describeBrowser('curl/8.7.1')).toBeNull()
+    expect(describeBrowser(null)).toBeNull()
+  })
+
+  it('labels pages and sites', () => {
+    expect(pagePath('https://shop.test/boots?size=9#reviews')).toBe('/boots?size=9#reviews')
+    expect(pageLabel({ url: 'https://shop.test/boots', title: '', at: '' })).toBe('/boots')
+    expect(pageLabel({ url: 'https://shop.test/boots', title: 'Boots', at: '' })).toBe('Boots')
+    expect(siteName('https://www.search.test/?q=1')).toBe('search.test')
+    expect(siteName('not a url')).toBe('not a url')
   })
 })

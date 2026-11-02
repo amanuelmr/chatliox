@@ -25,17 +25,18 @@ vi.mock('@/api/messages', () => ({
 }))
 vi.mock('@/api/organizations', () => ({ getWidgetConfig: vi.fn() }))
 
-// The chat view opens a live connection; the tests only need it not to fail.
+// The chat view opens a live connection; this records what the widget sends on it.
 class FakeSocket {
+  static sent: Record<string, unknown>[] = []
   onopen: (() => void) | null = null
   onmessage: (() => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
-  readyState = 0
-  send() {}
+  readyState = 1
+  send(data: string) { FakeSocket.sent.push(JSON.parse(data)) }
   close() {}
 }
-vi.stubGlobal('WebSocket', FakeSocket)
+vi.stubGlobal('WebSocket', Object.assign(FakeSocket, { OPEN: 1 }))
 
 const KEY = 'widget-key'
 
@@ -55,6 +56,7 @@ const config = (patch: Partial<WidgetConfig> = {}): WidgetConfig => ({
   pre_chat_email: 'optional',
   pre_chat_fields: [],
   first_response_minutes: null,
+  typing_preview: true,
   is_online: true,
   ...patch,
 })
@@ -167,5 +169,29 @@ describe('widget transcript request', () => {
     await userEvent.type(within(form).getByRole('textbox'), 'vi@example.com')
     await userEvent.click(within(form).getByRole('button', { name: 'Send' }))
     expect(emailVisitorTranscript).toHaveBeenCalledWith('c1', expect.any(String), 'vi@example.com')
+  })
+})
+
+describe('widget typing preview', () => {
+  beforeEach(() => {
+    FakeSocket.sent = []
+    localStorage.setItem(`chatliox_conversation_id_${KEY}`, 'c1')
+    vi.mocked(getVisitorMessages).mockResolvedValue([])
+    vi.mocked(getVisitorConversationStatus).mockResolvedValue({ status: 'open', has_email: false })
+  })
+
+  const typed = () => FakeSocket.sent.filter((e) => e.type === 'typing')
+
+  it('shares the draft with the team while typing', async () => {
+    await openWidget(config())
+    await userEvent.type(await screen.findByPlaceholderText('Type a message…'), 'Hey')
+    expect(typed()[typed().length - 1]).toEqual({ type: 'typing', is_typing: true, draft: 'Hey' })
+  })
+
+  it('keeps the draft private when the team turned the preview off', async () => {
+    await openWidget(config({ typing_preview: false }))
+    await userEvent.type(await screen.findByPlaceholderText('Type a message…'), 'Hey')
+    expect(typed().length).toBeGreaterThan(0)
+    expect(typed().every((e) => !('draft' in e))).toBe(true)
   })
 })

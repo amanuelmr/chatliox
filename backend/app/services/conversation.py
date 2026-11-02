@@ -19,12 +19,18 @@ async def create_conversation(
     organization_id: uuid.UUID,
     pre_chat_answers: list[dict] | None = None,
     assigned_to_id: uuid.UUID | None = None,
+    visitor_pages: list[dict] | None = None,
+    visitor_user_agent: str | None = None,
+    visitor_referrer: str | None = None,
 ) -> Conversation:
     conversation = Conversation(
         visitor_id=visitor_id,
         visitor_name=visitor_name,
         visitor_email=visitor_email,
         pre_chat_answers=pre_chat_answers or [],
+        visitor_pages=visitor_pages or [],
+        visitor_user_agent=visitor_user_agent,
+        visitor_referrer=visitor_referrer,
         status=ConversationStatus.WAITING,
         waiting_since=datetime.now(timezone.utc),
         organization_id=organization_id,

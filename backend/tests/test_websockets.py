@@ -223,3 +223,33 @@ def test_a_macro_reaches_the_visitor_and_the_inbox(http: TestClient, setup: dict
             # One inbox update with the end result, not one per step.
             updated = dashboard.receive_json()
             assert (updated["type"], updated["status"]) == ("conversation_updated", "closed")
+
+
+def test_agents_see_what_the_visitor_is_typing_unless_turned_off(http: TestClient, setup: dict):
+    conv, visitor_id = setup["conv_id"], setup["visitor_id"]
+    before = _open()
+    with http.websocket_connect(f"/ws/conversations/{conv}?token={setup['token']}") as agent:
+        _joined(before + 1)
+        assert agent.receive_json()["type"] == "viewers"
+        with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
+            assert agent.receive_json()["type"] == "presence"
+            visitor.send_json({"type": "typing", "is_typing": True, "draft": "My order hasn't arr"})
+            assert agent.receive_json()["draft"] == "My order hasn't arr"
+            # A draft is never sent once the visitor stops typing.
+            visitor.send_json({"type": "typing", "is_typing": False, "draft": "My order"})
+            assert "draft" not in agent.receive_json()
+
+        res = http.put(
+            "/organizations/typing-preview",
+            headers={"Authorization": f"Bearer {setup['token']}"},
+            json={"typing_preview": False},
+        )
+        assert res.json()["typing_preview"] is False
+        assert http.get(f"/organizations/widget/{setup['widget_key']}").json()["typing_preview"] is False
+        with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
+            event = agent.receive_json()
+            while event["type"] != "presence" or event["status"] != "online":
+                event = agent.receive_json()
+            visitor.send_json({"type": "typing", "is_typing": True, "draft": "secret"})
+            event = agent.receive_json()
+            assert (event["type"], event["is_typing"], "draft" in event) == ("typing", True, False)
