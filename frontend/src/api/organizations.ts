@@ -5,8 +5,10 @@ import type {
   Member,
   Organization,
   PreChatField,
+  ProactiveMessage,
   Teammate,
   UserRole,
+  WidgetDevices,
   WidgetPosition,
 } from '@/types/auth'
 
@@ -27,6 +29,12 @@ export interface WidgetConfig {
   pre_chat_fields: PreChatField[]
   first_response_minutes: number | null
   typing_preview: boolean
+  welcome_messages: string[]
+  quick_replies: string[]
+  proactive_messages: ProactiveMessage[]
+  widget_devices: WidgetDevices
+  widget_hidden_paths: string[]
+  widget_allowed_domains: string[]
   is_online: boolean
 }
 
@@ -87,6 +95,22 @@ export const updateAutoAssign = (autoAssign: boolean): Promise<Organization> =>
 
 export const updateTypingPreview = (enabled: boolean): Promise<Organization> =>
   client.put<Organization>('/organizations/typing-preview', { typing_preview: enabled }).then((r) => r.data)
+
+export const updateWelcome = (welcome: { welcome_messages: string[]; quick_replies: string[] }): Promise<Organization> =>
+  client.put<Organization>('/organizations/welcome', welcome).then((r) => r.data)
+
+export const updateProactiveMessages = (messages: ProactiveMessage[]): Promise<Organization> =>
+  client.put<Organization>('/organizations/proactive-messages', { proactive_messages: messages }).then((r) => r.data)
+
+// How many chats each proactive message has started.
+export const getProactiveStats = (): Promise<{ id: string; chats: number }[]> =>
+  client.get<{ id: string; chats: number }[]>('/organizations/proactive-messages/stats').then((r) => r.data)
+
+export const updateDisplayRules = (rules: {
+  widget_devices: WidgetDevices
+  widget_hidden_paths: string[]
+  widget_allowed_domains: string[]
+}): Promise<Organization> => client.put<Organization>('/organizations/display-rules', rules).then((r) => r.data)
 
 export const updateResponseTarget = (minutes: number | null): Promise<Organization> =>
   client.put<Organization>('/organizations/response-target', { first_response_minutes: minutes }).then((r) => r.data)

@@ -24,6 +24,7 @@ import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
 import { useVisitorTracking } from '@/hooks/useVisitorTracking'
 import Spinner from '@/components/Spinner'
+import { QuickReplies, TeamBubbles } from '@/components/widget/WelcomeThread'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
 import type { FieldRequirement, PreChatField } from '@/types/auth'
 
@@ -182,6 +183,8 @@ export default function WidgetPage() {
           onIncomingAdminMessage={handleIncomingAdminMessage}
           isOnline={isOnline}
           shareDraft={widgetConfig?.typing_preview ?? false}
+          teamName={widgetConfig?.name ?? 'Support'}
+          welcomeMessages={widgetConfig?.welcome_messages ?? []}
         />
       ) : (
         <WelcomeView
@@ -194,6 +197,9 @@ export default function WidgetPage() {
           nameRequirement={widgetConfig?.pre_chat_name ?? 'optional'}
           emailRequirement={widgetConfig?.pre_chat_email ?? 'optional'}
           questions={widgetConfig?.pre_chat_fields ?? []}
+          teamName={widgetConfig?.name ?? 'Support'}
+          welcomeMessages={widgetConfig?.welcome_messages ?? []}
+          quickReplies={widgetConfig?.quick_replies ?? []}
         />
       )}
     </div>
@@ -289,6 +295,9 @@ interface WelcomeViewProps {
   nameRequirement: FieldRequirement
   emailRequirement: FieldRequirement
   questions: PreChatField[]
+  teamName: string
+  welcomeMessages: string[]
+  quickReplies: string[]
 }
 
 const INPUT_CLASS =
@@ -304,6 +313,9 @@ function WelcomeView({
   nameRequirement,
   emailRequirement,
   questions,
+  teamName,
+  welcomeMessages,
+  quickReplies,
 }: WelcomeViewProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -316,14 +328,15 @@ function WelcomeView({
   const showName = nameRequirement !== 'hidden'
   const emailValid = EMAIL_PATTERN.test(email.trim())
   const answered = (q: PreChatField) => (answers[q.id] ?? '').trim() !== ''
-  const canSubmit =
-    firstMessage.trim() !== '' &&
+  // Everything but the message itself.
+  const detailsReady =
     (emailRequired ? emailValid : email.trim() === '' || emailValid) &&
     (nameRequirement !== 'required' || name.trim() !== '') &&
     questions.every((q) => !q.required || answered(q))
+  const canSubmit = firstMessage.trim() !== '' && detailsReady
 
   const { mutate: startChat, isPending, error: startError } = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (message: string) => {
       const conv = await createConversation({
         visitor_id: visitorId,
         visitor_name: (showName && name.trim()) || undefined,
@@ -333,10 +346,10 @@ function WelcomeView({
           questions.filter(answered).map((q) => [q.id, answers[q.id].trim()]),
         ),
       })
-      if (firstMessage.trim()) {
+      if (message.trim()) {
         await sendMessage({
           conversation_id: conv.id,
-          content: firstMessage.trim(),
+          content: message.trim(),
           sender_type: 'visitor',
           visitor_id: visitorId,
         })
@@ -353,6 +366,21 @@ function WelcomeView({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5">
+        {(welcomeMessages.length > 0 || quickReplies.length > 0) && (
+          <div className="flex flex-col gap-3 pb-2">
+            <TeamBubbles messages={welcomeMessages} brandColor={brandColor} teamName={teamName} />
+            <QuickReplies
+              replies={quickReplies}
+              brandColor={brandColor}
+              disabled={isPending}
+              // One tap sends it, unless the form still needs something from the visitor.
+              onPick={(reply) => {
+                setFirstMessage(reply)
+                if (detailsReady) startChat(reply)
+              }}
+            />
+          </div>
+        )}
         {showName && (
           <input
             type="text"
@@ -418,7 +446,7 @@ function WelcomeView({
         )}
 
         <button
-          onClick={() => startChat()}
+          onClick={() => startChat(firstMessage)}
           disabled={!canSubmit || isPending}
           style={{ backgroundColor: brandColor }}
           className="w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
@@ -448,9 +476,12 @@ interface ChatViewProps {
   isOnline: boolean
   // Lets the team see the message as it's typed (the org's typing preview setting).
   shareDraft: boolean
+  teamName: string
+  // Kept at the top of the conversation, since the visitor's first message may answer them.
+  welcomeMessages: string[]
 }
 
-function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft }: ChatViewProps) {
+function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatusChange, brandColor, onIncomingAdminMessage, isOnline, shareDraft, teamName, welcomeMessages }: ChatViewProps) {
   const queryClient = useQueryClient()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -629,7 +660,8 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
         {isLoading && (
           <p className="text-center text-xs text-zinc-400 py-6">Loading…</p>
         )}
-        {!isLoading && messages.length === 0 && (
+        {!isLoading && <TeamBubbles messages={welcomeMessages} brandColor={brandColor} teamName={teamName} />}
+        {!isLoading && messages.length === 0 && welcomeMessages.length === 0 && (
           <p className="text-center text-xs text-zinc-400 py-6">No messages yet.</p>
         )}
         {messages.filter((msg) => !msg.is_internal).map((msg) => (

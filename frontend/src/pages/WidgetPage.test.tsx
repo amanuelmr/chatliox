@@ -57,6 +57,12 @@ const config = (patch: Partial<WidgetConfig> = {}): WidgetConfig => ({
   pre_chat_fields: [],
   first_response_minutes: null,
   typing_preview: true,
+  welcome_messages: [],
+  quick_replies: [],
+  proactive_messages: [],
+  widget_devices: 'all',
+  widget_hidden_paths: [],
+  widget_allowed_domains: [],
   is_online: true,
   ...patch,
 })
@@ -193,5 +199,42 @@ describe('widget typing preview', () => {
     await userEvent.type(await screen.findByPlaceholderText('Type a message…'), 'Hey')
     expect(typed().length).toBeGreaterThan(0)
     expect(typed().every((e) => !('draft' in e))).toBe(true)
+  })
+})
+
+describe('widget welcome', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.mocked(createConversation).mockReset().mockResolvedValue({ id: 'c1' } as Conversation)
+    vi.mocked(sendMessage).mockReset().mockResolvedValue({} as Message)
+    vi.mocked(getVisitorMessages).mockResolvedValue([])
+    vi.mocked(getVisitorConversationStatus).mockResolvedValue({ status: 'waiting', has_email: false })
+  })
+
+  const welcoming = (patch: Partial<WidgetConfig> = {}) =>
+    config({ welcome_messages: ['Hi there!', 'Ask us anything.'], quick_replies: ['Pricing', 'Shipping'], ...patch })
+
+  it('greets the visitor, and a quick reply starts the chat in one tap', async () => {
+    await openWidget(welcoming())
+    const team = await screen.findByLabelText('Messages from Acme')
+    expect(within(team).getByText('Hi there!')).toBeInTheDocument()
+    expect(within(team).getByText('Ask us anything.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Shipping' }))
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled())
+    expect(vi.mocked(sendMessage).mock.calls[0][0]).toEqual(expect.objectContaining({ content: 'Shipping' }))
+    // The greeting stays at the top of the conversation the visitor replied to.
+    expect(await screen.findByLabelText('Messages from Acme')).toBeInTheDocument()
+  })
+
+  it('waits for required details before sending a quick reply', async () => {
+    await openWidget(welcoming({ pre_chat_name: 'required' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Pricing' }))
+    expect(createConversation).not.toHaveBeenCalled()
+    expect(screen.getByPlaceholderText('How can we help you?')).toHaveValue('Pricing')
+
+    await userEvent.type(screen.getByPlaceholderText('Your name'), 'Vi')
+    await userEvent.click(sendButton())
+    await vi.waitFor(() => expect(createConversation).toHaveBeenCalled())
   })
 })

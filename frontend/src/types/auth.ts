@@ -40,6 +40,28 @@ export interface Organization {
   auto_assign: boolean
   first_response_minutes: number | null
   typing_preview: boolean
+  welcome_messages: string[]
+  quick_replies: string[]
+  proactive_messages: ProactiveMessage[]
+  widget_devices: WidgetDevices
+  widget_hidden_paths: string[]
+  widget_allowed_domains: string[]
+}
+
+export type WidgetDevices = 'all' | 'desktop' | 'mobile'
+
+// An invitation the widget pops up on its own.
+export interface ProactiveMessage {
+  // Missing until the message is first saved.
+  id?: string
+  message: string
+  // Only on pages whose address contains this; empty means every page.
+  page_contains: string
+  delay_seconds: number
+  // From the visitor's nth visit on.
+  min_visits: number
+  frequency: 'once' | 'every_visit'
+  enabled: boolean
 }
 
 export type UserRole = 'admin' | 'agent'
