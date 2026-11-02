@@ -37,6 +37,7 @@ export interface Organization {
   pre_chat_name: FieldRequirement
   pre_chat_email: FieldRequirement
   pre_chat_fields: PreChatField[]
+  auto_assign: boolean
 }
 
 export type UserRole = 'admin' | 'agent'

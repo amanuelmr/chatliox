@@ -11,6 +11,7 @@ import {
   removeMember,
   rotateInviteToken,
   sendInviteEmail,
+  updateAutoAssign,
   updateBusinessHours,
   updateMemberRole,
   updatePreChatForm,
@@ -452,6 +453,9 @@ function SettingsView({
 
         {/* Pre-chat form */}
         <PreChatFormCard user={user} token={token} setAuth={setAuth} />
+
+        {/* Chat assignment */}
+        <AutoAssignCard user={user} token={token} setAuth={setAuth} />
 
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
@@ -961,6 +965,57 @@ function NumberField({
         className="rounded-lg border border-zinc-200 px-3 py-2 text-sm font-normal outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
       />
     </label>
+  )
+}
+
+function AutoAssignCard({
+  user,
+  token,
+  setAuth,
+}: {
+  user: User | null
+  token: string | null
+  setAuth: (token: string, user: User) => void
+}) {
+  const enabled = user?.organization.auto_assign ?? false
+
+  const { mutate: toggle, isPending, error } = useMutation({
+    mutationFn: () => updateAutoAssign(!enabled),
+    onSuccess: (updatedOrg) => {
+      if (token && user) setAuth(token, { ...user, organization: updatedOrg })
+    },
+  })
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">Auto-assign new chats</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online,
+            it stays unassigned until someone replies.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Auto-assign new chats"
+          disabled={isPending}
+          onClick={() => toggle()}
+          className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 disabled:opacity-50 ${
+            enabled ? 'bg-brand-500' : 'bg-zinc-200'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+              enabled ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-500">Couldn't update auto-assignment. Please try again.</p>}
+    </div>
   )
 }
 

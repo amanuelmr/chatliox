@@ -115,3 +115,13 @@ def test_dashboard_hears_about_new_and_updated_chats(http: TestClient, setup: di
         )
         updated = dashboard.receive_json()
         assert (updated["type"], updated["id"], updated["status"]) == ("conversation_updated", setup["conv_id"], "closed")
+
+
+def test_an_open_dashboard_makes_the_agent_available_for_new_chats(http: TestClient, setup: dict):
+    headers = {"Authorization": f"Bearer {setup['token']}"}
+    http.put("/organizations/auto-assign", headers=headers, json={"auto_assign": True})
+    before = _open()
+    with http.websocket_connect(f"/ws/dashboard?token={setup['token']}") as dashboard:
+        _joined(before + 1)
+        http.post("/conversations", json={"visitor_id": "someone", "widget_key": setup["widget_key"]})
+        assert dashboard.receive_json()["assigned_to_name"] == "Wes"

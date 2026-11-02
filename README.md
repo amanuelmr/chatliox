@@ -22,6 +22,7 @@ The project includes:
 - Conversation states such as waiting, open, and closed
 - Internal notes that stay visible only to the team
 - Team invites and role-based access
+- Optional auto-assignment: new chats are handed out in turn to teammates who have the dashboard open
 - Saved canned responses agents can insert into replies
 - Conversation tags and full-text search across the inbox
 - Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)

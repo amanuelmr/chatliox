@@ -21,6 +21,7 @@ from app.services.pre_chat import assign_field_ids
 from app.services.organization import (
     get_organization_by_widget_key,
     rotate_invite_token,
+    update_auto_assign,
     update_business_hours,
     update_pre_chat_form,
     update_widget_config,
@@ -207,6 +208,22 @@ async def set_pre_chat_form(
         body.pre_chat_email,
         assign_field_ids(body.pre_chat_fields),
     )
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+class UpdateAutoAssignRequest(BaseModel):
+    auto_assign: bool
+
+
+@router.put("/auto-assign", response_model=OrganizationInfo)
+async def set_auto_assign(
+    body: UpdateAutoAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_auto_assign(db, current_user.organization_id, body.auto_assign)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org

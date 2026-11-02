@@ -30,6 +30,7 @@ from app.services.conversation import (
     update_conversation_status,
     update_conversation_tags,
 )
+from app.services.assignment import pick_assignee
 from app.services.business_hours import is_within_business_hours
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_id, get_organization_by_widget_key
@@ -65,6 +66,9 @@ async def create(
     except PreChatError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
+    assignee_id = (
+        await pick_assignee(db, org.id, ws_manager.online_agent_ids()) if org.auto_assign else None
+    )
     conversation = await create_conversation(
         db,
         body.visitor_id,
@@ -72,6 +76,7 @@ async def create(
         body.visitor_email,
         org.id,
         answers,
+        assignee_id,
     )
     await ws_manager.broadcast(
         org_room(org.id),

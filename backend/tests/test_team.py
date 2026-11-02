@@ -1,21 +1,6 @@
-import uuid
-
 from httpx import AsyncClient
 
-from tests.conftest import token_from
-
-
-async def _join(client: AsyncClient, admin: dict, name: str = "Andy Agent") -> dict:
-    """Accept the org's invite link as a new teammate."""
-    invite_token = admin["me"]["organization"]["invite_token"]
-    email = f"agent-{uuid.uuid4().hex[:8]}@example.com"
-    res = await client.post(
-        f"/auth/invite/{invite_token}",
-        json={"email": email, "password": "s3cret-pass", "full_name": name},
-    )
-    assert res.status_code == 201, res.text
-    headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
-    return {"email": email, "headers": headers, "me": (await client.get("/auth/me", headers=headers)).json()}
+from tests.conftest import join_team, token_from
 
 
 async def test_invite_link_creates_a_verified_agent(client: AsyncClient, admin: dict):
@@ -23,7 +8,7 @@ async def test_invite_link_creates_a_verified_agent(client: AsyncClient, admin: 
     info = await client.get(f"/auth/invite/{invite_token}")
     assert info.json() == {"org_name": "Acme"}
 
-    agent = await _join(client, admin)
+    agent = await join_team(client, admin)
     assert agent["me"]["role"] == "agent"
     assert agent["me"]["is_verified"] is True
     assert agent["me"]["organization"]["widget_key"] == admin["me"]["organization"]["widget_key"]
@@ -48,7 +33,7 @@ async def test_invite_email(client: AsyncClient, admin: dict, sent_emails):
 
 
 async def test_agents_cannot_manage_the_team(client: AsyncClient, admin: dict):
-    agent = await _join(client, admin)
+    agent = await join_team(client, admin)
     for method, url in (
         ("get", "/organizations/members"),
         ("post", "/organizations/invite/rotate"),
@@ -59,7 +44,7 @@ async def test_agents_cannot_manage_the_team(client: AsyncClient, admin: dict):
 
 
 async def test_promote_and_remove_members(client: AsyncClient, admin: dict):
-    agent = await _join(client, admin)
+    agent = await join_team(client, admin)
     members = (await client.get("/organizations/members", headers=admin["headers"])).json()
     assert {m["email"] for m in members} == {admin["email"], agent["email"]}
 

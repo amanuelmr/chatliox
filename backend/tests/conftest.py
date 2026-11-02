@@ -67,6 +67,19 @@ def token_from(url: str) -> str:
     return query["token"][0] if "token" in query else url.rstrip("/").rsplit("/", 1)[-1]
 
 
+async def join_team(client: AsyncClient, admin: dict, name: str = "Andy Agent") -> dict:
+    """Accept the org's invite link as a new teammate."""
+    invite_token = admin["me"]["organization"]["invite_token"]
+    email = f"agent-{uuid.uuid4().hex[:8]}@example.com"
+    res = await client.post(
+        f"/auth/invite/{invite_token}",
+        json={"email": email, "password": "s3cret-pass", "full_name": name},
+    )
+    assert res.status_code == 201, res.text
+    headers = {"Authorization": f"Bearer {res.json()['access_token']}"}
+    return {"email": email, "headers": headers, "me": (await client.get("/auth/me", headers=headers)).json()}
+
+
 @pytest.fixture
 def make_admin(client: AsyncClient, sent_emails: list[dict]):
     """Registers and verifies a new admin, each with its own organization."""

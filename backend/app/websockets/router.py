@@ -51,6 +51,7 @@ async def dashboard_ws(
 
     room = org_room(user.organization_id)
     manager.add_connection(room, websocket)
+    manager.agent_connected(str(user.id))
 
     try:
         while True:
@@ -61,6 +62,7 @@ async def dashboard_ws(
         pass
     finally:
         manager.disconnect(room, websocket)
+        manager.agent_disconnected(str(user.id))
 
 
 @router.websocket("/ws/conversations/{conversation_id}")

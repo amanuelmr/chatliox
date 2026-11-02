@@ -64,6 +64,9 @@ class Organization(UUIDMixin, TimestampMixin, Base):
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
 
+    # Hand each new chat to the next teammate with the dashboard open, in turn.
+    auto_assign: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="organization"

@@ -27,6 +27,7 @@ class OrganizationInfo(BaseModel):
     pre_chat_name: str
     pre_chat_email: str
     pre_chat_fields: list[dict]
+    auto_assign: bool
 
 
 class UserResponse(BaseModel):

@@ -78,3 +78,6 @@ export const updateBusinessHours = (data: UpdateBusinessHoursRequest): Promise<O
 
 export const updatePreChatForm = (data: UpdatePreChatFormRequest): Promise<Organization> =>
   client.put<Organization>('/organizations/pre-chat-form', data).then((r) => r.data)
+
+export const updateAutoAssign = (autoAssign: boolean): Promise<Organization> =>
+  client.put<Organization>('/organizations/auto-assign', { auto_assign: autoAssign }).then((r) => r.data)
