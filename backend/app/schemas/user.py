@@ -43,6 +43,13 @@ class UserResponse(BaseModel):
     organization: OrganizationInfo
 
 
+class TeammateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+
+
 class MemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

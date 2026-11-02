@@ -11,6 +11,7 @@ from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.user import User
 from app.schemas.conversation import (
+    AssignConversationRequest,
     ConversationResponse,
     CreateConversationRequest,
     SubmitCsatRequest,
@@ -20,9 +21,11 @@ from app.schemas.conversation import (
 )
 from app.schemas.message import MessageResponse
 from app.services.conversation import (
+    assign_conversation,
     create_conversation,
     get_conversation,
     get_conversations,
+    get_conversation_with_assignee,
     set_visitor_email,
     mark_visitor_messages_read,
     submit_csat,
@@ -36,6 +39,7 @@ from app.services.message import get_messages
 from app.services.organization import get_organization_by_id, get_organization_by_widget_key
 from app.services.pre_chat import PreChatError, collect_pre_chat_answers
 from app.services.transcript import email_transcript
+from app.services.user import get_user_by_id
 from app.websockets.router import org_room
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -147,6 +151,42 @@ async def update_tags(
     updated = await update_conversation_tags(db, conversation_id, body.tags)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    await ws_manager.broadcast(
+        org_room(updated.organization_id),
+        {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},
+    )
+    return updated
+
+
+@router.patch("/{conversation_id}/assignee", response_model=ConversationResponse)
+async def update_assignee(
+    conversation_id: uuid.UUID,
+    body: AssignConversationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_verified_user),
+) -> ConversationResponse:
+    conv = await get_conversation(db, conversation_id)
+    if not conv or conv.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    assignee = None
+    if body.assignee_id is not None:
+        assignee = await get_user_by_id(db, body.assignee_id)
+        if (
+            assignee is None
+            or assignee.organization_id != current_user.organization_id
+            or not assignee.is_active
+            or not assignee.is_verified
+        ):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Pick a teammate on this team")
+    if conv.assigned_to_id == (assignee.id if assignee else None):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The chat is already assigned that way")
+
+    note = await assign_conversation(db, conv, current_user, assignee, body.note)
+    await ws_manager.broadcast_to_agents(
+        str(conversation_id), {"type": "message", **MessageResponse.model_validate(note).model_dump(mode="json")}
+    )
+    updated = await get_conversation_with_assignee(db, conversation_id)
     await ws_manager.broadcast(
         org_room(updated.organization_id),
         {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},

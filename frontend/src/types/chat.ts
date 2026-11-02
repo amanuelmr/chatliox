@@ -9,6 +9,7 @@ export interface Conversation {
   status: ConversationStatus
   last_message_at: string | null
   created_at: string
+  assigned_to_id: string | null
   assigned_to_name: string | null
   tags: string[]
   csat_rating: number | null

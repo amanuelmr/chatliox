@@ -7,6 +7,7 @@ import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { listNames } from '@/lib/teammates'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
+import AssignMenu from '@/components/AssignMenu'
 import Spinner from '@/components/Spinner'
 import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
@@ -241,11 +242,10 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             <p className="text-sm font-semibold text-zinc-900 tracking-tight truncate">
               {conv ? visitorLabel(conv) : '…'}
             </p>
-            <p className="text-xs text-zinc-400 truncate">
-              {conv?.assigned_to_name
-                ? <span>Handled by <span className="text-brand-600 font-medium">{conv.assigned_to_name}</span></span>
-                : conv?.visitor_email ?? 'No reply yet'}
-            </p>
+            <div className="flex items-center gap-2 text-xs text-zinc-400 min-w-0">
+              {conv && <AssignMenu conversation={conv} />}
+              {conv?.visitor_email && <span className="truncate">· {conv.visitor_email}</span>}
+            </div>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
             {/* Teammates with this chat open */}

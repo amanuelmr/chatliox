@@ -26,6 +26,12 @@ class UpdateConversationTagsRequest(BaseModel):
     tags: list[str]
 
 
+class AssignConversationRequest(BaseModel):
+    # None unassigns the chat.
+    assignee_id: uuid.UUID | None
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] = ""
+
+
 class SubmitCsatRequest(BaseModel):
     visitor_id: str
     rating: int = Field(ge=1, le=5)
@@ -47,6 +53,7 @@ class ConversationResponse(BaseModel):
     status: ConversationStatus
     last_message_at: datetime | None
     created_at: datetime
+    assigned_to_id: uuid.UUID | None = None
     assigned_to_name: str | None = None
     tags: list[str] = []
     csat_rating: int | None = None

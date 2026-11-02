@@ -32,6 +32,19 @@ async def get_members_by_org(db: AsyncSession, organization_id: uuid.UUID) -> li
     return list(result.scalars().all())
 
 
+async def get_teammates(db: AsyncSession, organization_id: uuid.UUID) -> list[User]:
+    result = await db.execute(
+        select(User)
+        .where(
+            User.organization_id == organization_id,
+            User.is_active.is_(True),
+            User.is_verified.is_(True),
+        )
+        .order_by(User.full_name)
+    )
+    return list(result.scalars().all())
+
+
 async def create_user(
     db: AsyncSession,
     email: str,

@@ -38,3 +38,6 @@ export const emailVisitorTranscript = (conversationId: string, visitorId: string
   client
     .post(`/conversations/${conversationId}/visitor-transcript`, { visitor_id: visitorId, email })
     .then(() => undefined)
+
+export const assignConversation = (id: string, assigneeId: string | null, note = ''): Promise<Conversation> =>
+  client.patch<Conversation>(`/conversations/${id}/assignee`, { assignee_id: assigneeId, note }).then((r) => r.data)

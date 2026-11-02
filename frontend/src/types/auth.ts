@@ -77,3 +77,8 @@ export interface TokenResponse {
   access_token: string
   token_type: string
 }
+
+export interface Teammate {
+  id: string
+  full_name: string
+}

@@ -6,10 +6,10 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_admin, require_email_configured
+from app.core.deps import get_current_user, require_admin, require_email_configured, require_verified_user
 from app.core.email import send_invite_email
 from app.models.user import User, UserRole
-from app.schemas.user import MemberResponse, OrganizationInfo
+from app.schemas.user import MemberResponse, OrganizationInfo, TeammateResponse
 from app.schemas.widget import (
     UpdateBusinessHoursRequest,
     UpdatePreChatFormRequest,
@@ -26,7 +26,7 @@ from app.services.organization import (
     update_pre_chat_form,
     update_widget_config,
 )
-from app.services.user import get_members_by_org
+from app.services.user import get_members_by_org, get_teammates
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,15 @@ async def list_members(
     current_user: User = Depends(require_admin),
 ) -> list[MemberResponse]:
     return await get_members_by_org(db, current_user.organization_id)
+
+
+@router.get("/teammates", response_model=list[TeammateResponse])
+async def list_teammates(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_verified_user),
+) -> list[TeammateResponse]:
+    """Who a chat can be handed to. Unlike /members, any teammate may ask."""
+    return await get_teammates(db, current_user.organization_id)
 
 
 class UpdateRoleRequest(BaseModel):

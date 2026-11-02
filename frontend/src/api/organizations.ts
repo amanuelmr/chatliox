@@ -5,6 +5,7 @@ import type {
   Member,
   Organization,
   PreChatField,
+  Teammate,
   UserRole,
   WidgetPosition,
 } from '@/types/auth'
@@ -81,3 +82,6 @@ export const updatePreChatForm = (data: UpdatePreChatFormRequest): Promise<Organ
 
 export const updateAutoAssign = (autoAssign: boolean): Promise<Organization> =>
   client.put<Organization>('/organizations/auto-assign', { auto_assign: autoAssign }).then((r) => r.data)
+
+export const getTeammates = (): Promise<Teammate[]> =>
+  client.get<Teammate[]>('/organizations/teammates').then((r) => r.data)

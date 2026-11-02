@@ -177,3 +177,29 @@ def test_viewers_are_counted_per_socket():
     assert [v["name"] for v in manager.viewers(conv)] == ["Wes", "Sam"]
     manager.viewer_left(conv, "u1", second)
     assert [v["name"] for v in manager.viewers(conv)] == ["Sam"]
+
+
+def test_internal_notes_reach_teammates_live(http: TestClient, setup: dict):
+    conv, visitor_id = setup["conv_id"], setup["visitor_id"]
+    headers = {"Authorization": f"Bearer {setup['token']}"}
+    sam = _teammate(http, setup, "Sam")
+    before = _open()
+    with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
+        _joined(before + 1)
+        with http.websocket_connect(f"/ws/conversations/{conv}?token={sam['token']}") as sam_ws:
+            _joined(before + 2)
+            assert sam_ws.receive_json()["type"] == "viewers"
+            http.post(
+                "/messages",
+                headers=headers,
+                json={"conversation_id": conv, "content": "VIP", "sender_type": "admin", "is_internal": True},
+            )
+            http.patch(f"/conversations/{conv}/assignee", headers=headers, json={"assignee_id": sam["id"]})
+            assert [sam_ws.receive_json()["content"] for _ in range(2)] == ["VIP", "Assigned this chat to Sam."]
+
+            http.post("/messages", headers=headers, json={"conversation_id": conv, "content": "Hello", "sender_type": "admin"})
+            # The visitor's first message event is the public reply, not either note.
+            event = visitor.receive_json()
+            while event["type"] != "message":
+                event = visitor.receive_json()
+            assert event["content"] == "Hello"

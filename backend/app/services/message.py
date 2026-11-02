@@ -43,7 +43,8 @@ async def create_message(
         conversation.last_message_at = now
         if sender_type == SenderType.ADMIN:
             conversation.status = ConversationStatus.OPEN
-            if sender_id is not None:
+            # Replying claims an unassigned chat; an assigned one is moved with a transfer.
+            if sender_id is not None and conversation.assigned_to_id is None:
                 conversation.assigned_to_id = sender_id
         elif sender_type == SenderType.VISITOR:
             # Visitor reply to a resolved conversation reopens it

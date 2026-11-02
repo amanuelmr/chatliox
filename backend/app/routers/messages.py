@@ -69,10 +69,11 @@ async def _broadcast_new_message(
     was_closed: bool,
     is_internal: bool,
 ) -> None:
-    if is_internal:
-        return
-
     payload = {"type": "message", **MessageResponse.model_validate(message).model_dump(mode="json")}
+    if is_internal:
+        # Notes reach teammates live but never the visitor's socket.
+        await ws_manager.broadcast_to_agents(str(conversation_id), payload)
+        return
     await ws_manager.broadcast(str(conversation_id), payload)
 
     # Visitor reply to a resolved conversation — broadcast the reopen so widget updates live
