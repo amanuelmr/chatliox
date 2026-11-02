@@ -9,6 +9,8 @@ class ConnectionManager:
         self._visitors: dict[str, int] = {}
         # { user_id: number of open dashboard connections }
         self._agents: dict[str, int] = {}
+        # { conversation_id: { user_id: (name, that agent's sockets on the conversation) } }
+        self._viewers: dict[str, dict[str, tuple[str, set[WebSocket]]]] = {}
 
     async def connect(self, conversation_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -50,6 +52,37 @@ class ConnectionManager:
 
     def online_agent_ids(self) -> set[str]:
         return set(self._agents)
+
+    def viewer_joined(self, conversation_id: str, user_id: str, name: str, websocket: WebSocket) -> None:
+        viewers = self._viewers.setdefault(conversation_id, {})
+        viewers.setdefault(user_id, (name, set()))[1].add(websocket)
+
+    def viewer_left(self, conversation_id: str, user_id: str, websocket: WebSocket) -> None:
+        viewers = self._viewers.get(conversation_id, {})
+        entry = viewers.get(user_id)
+        if entry is None:
+            return
+        entry[1].discard(websocket)
+        if not entry[1]:
+            del viewers[user_id]
+        if not viewers:
+            self._viewers.pop(conversation_id, None)
+
+    def viewers(self, conversation_id: str) -> list[dict]:
+        return [
+            {"user_id": user_id, "name": name}
+            for user_id, (name, _) in self._viewers.get(conversation_id, {}).items()
+        ]
+
+    async def broadcast_viewers(self, conversation_id: str) -> None:
+        """Tell every agent on the conversation who else has it open. Visitors aren't told."""
+        event = {"type": "viewers", "agents": self.viewers(conversation_id)}
+        for _, sockets in list(self._viewers.get(conversation_id, {}).values()):
+            for ws in sockets.copy():
+                try:
+                    await ws.send_json(event)
+                except Exception:
+                    pass
 
     async def broadcast(self, conversation_id: str, data: dict) -> None:
         await self._send_to_room(conversation_id, data, exclude=None)

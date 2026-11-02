@@ -67,11 +67,14 @@ def test_presence_typing_and_messages_reach_the_agent(http: TestClient, setup: d
     before = _open()
     with http.websocket_connect(f"/ws/conversations/{conv}?token={token}") as agent:
         _joined(before + 1)
+        assert agent.receive_json()["type"] == "viewers"
         with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
             assert agent.receive_json() == {"type": "presence", "user_id": visitor_id, "status": "online"}
 
             visitor.send_json({"type": "typing", "is_typing": True})
-            assert agent.receive_json() == {"type": "typing", "user_id": visitor_id, "is_typing": True}
+            assert agent.receive_json() == {
+                "type": "typing", "user_id": visitor_id, "sender_type": "visitor", "name": None, "is_typing": True,
+            }
 
             http.post(
                 "/messages",
@@ -125,3 +128,52 @@ def test_an_open_dashboard_makes_the_agent_available_for_new_chats(http: TestCli
         _joined(before + 1)
         http.post("/conversations", json={"visitor_id": "someone", "widget_key": setup["widget_key"]})
         assert dashboard.receive_json()["assigned_to_name"] == "Wes"
+
+
+def _teammate(http: TestClient, setup: dict, name: str) -> dict:
+    headers = {"Authorization": f"Bearer {setup['token']}"}
+    invite = http.get("/auth/me", headers=headers).json()["organization"]["invite_token"]
+    res = http.post(
+        f"/auth/invite/{invite}",
+        json={"email": f"mate-{uuid.uuid4().hex[:8]}@example.com", "password": "s3cret-pass", "full_name": name},
+    )
+    token = res.json()["access_token"]
+    me = http.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).json()
+    return {"token": token, "id": me["id"]}
+
+
+def test_agents_on_the_same_chat_see_each_other(http: TestClient, setup: dict):
+    conv, visitor_id = setup["conv_id"], setup["visitor_id"]
+    sam = _teammate(http, setup, "Sam")
+    before = _open()
+    with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
+        _joined(before + 1)
+        with http.websocket_connect(f"/ws/conversations/{conv}?token={setup['token']}") as wes:
+            _joined(before + 2)
+            assert [a["name"] for a in wes.receive_json()["agents"]] == ["Wes"]
+            with http.websocket_connect(f"/ws/conversations/{conv}?token={sam['token']}") as sam_ws:
+                _joined(before + 3)
+                assert wes.receive_json()["type"] == "presence"
+                assert sorted(a["name"] for a in wes.receive_json()["agents"]) == ["Sam", "Wes"]
+                assert sorted(a["name"] for a in sam_ws.receive_json()["agents"]) == ["Sam", "Wes"]
+
+                sam_ws.send_json({"type": "typing", "is_typing": True})
+                typing = wes.receive_json()
+                assert (typing["sender_type"], typing["name"], typing["user_id"]) == ("admin", "Sam", sam["id"])
+
+                # The visitor hears the typing, but never who has the chat open.
+                seen = [visitor.receive_json() for _ in range(3)]
+                assert [e["type"] for e in seen] == ["presence", "presence", "typing"]
+
+
+def test_viewers_are_counted_per_socket():
+    conv, first, second = str(uuid.uuid4()), object(), object()
+    manager.viewer_joined(conv, "u1", "Wes", first)
+    manager.viewer_joined(conv, "u1", "Wes", second)
+    manager.viewer_joined(conv, "u2", "Sam", object())
+    assert [v["name"] for v in manager.viewers(conv)] == ["Wes", "Sam"]
+
+    manager.viewer_left(conv, "u1", first)
+    assert [v["name"] for v in manager.viewers(conv)] == ["Wes", "Sam"]
+    manager.viewer_left(conv, "u1", second)
+    assert [v["name"] for v in manager.viewers(conv)] == ["Sam"]

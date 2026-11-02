@@ -4,6 +4,7 @@ import { getCannedResponses } from '@/api/cannedResponses'
 import { emailTranscript, getConversations, updateConversationStatus, updateConversationTags } from '@/api/conversations'
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
+import { listNames } from '@/lib/teammates'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import Spinner from '@/components/Spinner'
@@ -27,7 +28,12 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   const queryClient = useQueryClient()
   const token = useAuthStore((s) => s.token)
   const user  = useAuthStore((s) => s.user)
-  const { setOnline, setOffline, setTyping, typingUsers, clear: clearPresence } = usePresenceStore()
+  const { setOnline, setOffline, setTyping, setViewers, typing, viewers, clear: clearPresence } = usePresenceStore()
+  const otherViewers = viewers.filter((v) => v.user_id !== user?.id).map((v) => v.name)
+  const visitorTyping = [...typing.values()].some((t) => t.sender_type !== 'admin')
+  const teammatesTyping = [...typing]
+    .filter(([id, t]) => t.sender_type === 'admin' && id !== user?.id)
+    .map(([, t]) => t.name ?? 'A teammate')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -77,7 +83,8 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
         try {
           const e = JSON.parse(data as string) as WsEvent
           if (e.type === 'message') { appendMsg(e); queryClient.invalidateQueries({ queryKey: ['conversations'] }) }
-          else if (e.type === 'typing') setTyping(e.user_id ?? 'visitor', e.is_typing)
+          else if (e.type === 'typing') setTyping(e)
+          else if (e.type === 'viewers') setViewers(e.agents)
           else if (e.type === 'presence') e.status === 'online' ? setOnline(e.user_id) : setOffline(e.user_id)
         } catch { /* ignore */ }
       }
@@ -92,7 +99,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
       wsRef.current = null
       clearPresence()
     }
-  }, [conversationId, appendMsg, queryClient, token, setOnline, setOffline, setTyping, clearPresence])
+  }, [conversationId, appendMsg, queryClient, token, setOnline, setOffline, setTyping, setViewers, clearPresence])
 
   const sendTyping = useCallback((v: boolean) => {
     wsRef.current?.readyState === WebSocket.OPEN &&
@@ -241,6 +248,13 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
             </p>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Teammates with this chat open */}
+            {otherViewers.length > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 ring-1 ring-amber-200 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                {listNames(otherViewers)} {otherViewers.length === 1 ? 'is' : 'are'} also viewing
+              </span>
+            )}
             {/* Live dot */}
             <span className="flex items-center gap-1.5 text-xs text-zinc-400">
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-zinc-300 animate-pulse'}`} />
@@ -289,17 +303,23 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
           <div ref={bottomRef} />
         </div>
 
-        {/* Typing indicator */}
+        {/* Typing indicators */}
         <div className={`px-5 bg-zinc-50/40 overflow-hidden transition-all duration-200 ${
-          typingUsers.size > 0 && !resolved ? 'h-8 opacity-100' : 'h-0 opacity-0'
+          (visitorTyping || teammatesTyping.length > 0) && !resolved ? 'h-8 opacity-100' : 'h-0 opacity-0'
         }`}>
-          <div className="flex items-center gap-2 text-xs text-zinc-400 h-8">
-            <span className="flex gap-0.5 items-end">
-              {[0, 120, 240].map((d) => (
-                <span key={d} className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-              ))}
-            </span>
-            Visitor is typing…
+          <div className="flex items-center gap-4 text-xs h-8">
+            {visitorTyping && (
+              <span className="flex items-center gap-2 text-zinc-400">
+                <TypingDots color="bg-zinc-400" />
+                Visitor is typing…
+              </span>
+            )}
+            {teammatesTyping.length > 0 && (
+              <span className="flex items-center gap-2 text-amber-700 font-medium">
+                <TypingDots color="bg-amber-500" />
+                {listNames(teammatesTyping)} {teammatesTyping.length === 1 ? 'is' : 'are'} typing a reply…
+              </span>
+            )}
           </div>
         </div>
 
@@ -663,5 +683,15 @@ function Bubble({ message: m }: { message: Message }) {
         </p>
       </div>
     </div>
+  )
+}
+
+function TypingDots({ color }: { color: string }) {
+  return (
+    <span className="flex gap-0.5 items-end">
+      {[0, 120, 240].map((d) => (
+        <span key={d} className={`w-1 h-1 ${color} rounded-full animate-bounce`} style={{ animationDelay: `${d}ms` }} />
+      ))}
+    </span>
   )
 }
