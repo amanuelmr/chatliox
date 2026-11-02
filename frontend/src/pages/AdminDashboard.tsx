@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AdminChatWindow from '@/components/AdminChatWindow'
@@ -34,6 +34,7 @@ import type {
   Organization,
   User,
   UserRole,
+  WidgetLauncher,
   WidgetPosition,
 } from '@/types/auth'
 
@@ -626,6 +627,9 @@ function WidgetAppearanceCard({
   const [height, setHeight] = useState(org?.widget_height ?? 600)
   const [offsetX, setOffsetX] = useState(org?.widget_offset_x ?? 20)
   const [offsetY, setOffsetY] = useState(org?.widget_offset_y ?? 20)
+  const [launcher, setLauncher] = useState<WidgetLauncher>(org?.widget_launcher ?? 'always')
+  const [customCss, setCustomCss] = useState(org?.widget_custom_css ?? '')
+  const [copiedButton, setCopiedButton] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const iconUrlValid = iconUrl.trim() === '' || /^https?:\/\/.+/.test(iconUrl.trim())
@@ -641,6 +645,8 @@ function WidgetAppearanceCard({
         widget_height: height,
         widget_offset_x: offsetX,
         widget_offset_y: offsetY,
+        widget_launcher: launcher,
+        widget_custom_css: customCss,
       }),
     onSuccess: (updatedOrg) => {
       if (token && user) setAuth(token, { ...user, organization: updatedOrg })
@@ -687,22 +693,79 @@ function WidgetAppearanceCard({
       />
 
       <div>
-        <p className="text-xs font-medium text-zinc-700 mb-1.5">Launcher position</p>
-        <div className="flex gap-2">
-          {(['right', 'left'] as const).map((p) => (
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Where the chat button sits</p>
+        <div className="grid grid-cols-2 gap-2 max-w-xs" role="radiogroup" aria-label="Where the chat button sits">
+          {WIDGET_CORNERS.map((c) => (
             <button
-              key={p}
+              key={c.value}
               type="button"
-              onClick={() => setPosition(p)}
-              className={`flex-1 text-sm rounded-lg px-3 py-2 ring-1 transition-all duration-150 ${
-                position === p
-                  ? 'bg-brand-50 ring-brand-300 text-brand-700 font-medium'
-                  : 'ring-zinc-200 text-zinc-600 hover:bg-zinc-50'
+              role="radio"
+              aria-checked={position === c.value}
+              onClick={() => setPosition(c.value)}
+              className={`relative h-14 rounded-lg ring-1 transition-all duration-150 text-[11px] ${
+                position === c.value ? 'bg-brand-50 ring-brand-300 text-brand-700 font-medium' : 'ring-zinc-200 text-zinc-500 hover:bg-zinc-50'
               }`}
             >
-              Bottom {p}
+              <span
+                className={`absolute w-3 h-3 rounded-full ${position === c.value ? 'bg-brand-500' : 'bg-zinc-300'} ${
+                  c.value.startsWith('top') ? 'top-2' : 'bottom-2'
+                } ${c.value.endsWith('left') ? 'left-2' : 'right-2'}`}
+                aria-hidden
+              />
+              {c.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Show the chat button</p>
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Show the chat button">
+          {WIDGET_LAUNCHER_OPTIONS.map((o) => (
+            <label
+              key={o.value}
+              className={`flex items-start gap-2.5 rounded-lg px-3 py-2 ring-1 cursor-pointer ${
+                launcher === o.value ? 'bg-brand-50 ring-brand-300' : 'ring-zinc-200 hover:bg-zinc-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="widget-launcher"
+                checked={launcher === o.value}
+                onChange={() => setLauncher(o.value)}
+                className="mt-0.5 accent-brand-500"
+              />
+              <span>
+                <span className="block text-sm text-zinc-800">{o.label}</span>
+                <span className="block text-xs text-zinc-500">{o.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-2.5 rounded-lg bg-zinc-50 ring-1 ring-zinc-200 px-3 py-2.5">
+          <p className="text-xs text-zinc-600">
+            Any element on your site with <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-open</code> opens
+            the chat, for example a link in your mobile menu.{' '}
+            <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-toggle</code> and{' '}
+            <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-close</code> work the same way.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate text-[11px] text-zinc-700 bg-white ring-1 ring-zinc-200 rounded px-2 py-1.5">{OWN_BUTTON_SNIPPET}</code>
+            <button
+              type="button"
+              onClick={() =>
+                navigator.clipboard.writeText(OWN_BUTTON_SNIPPET).then(() => {
+                  setCopiedButton(true)
+                  setTimeout(() => setCopiedButton(false), 2_000)
+                })
+              }
+              className={`flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg ring-1 ${
+                copiedButton ? 'ring-emerald-300 bg-emerald-50 text-emerald-700' : 'ring-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100'
+              }`}
+            >
+              {copiedButton ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -749,6 +812,35 @@ function WidgetAppearanceCard({
         </div>
       </div>
 
+      <div>
+        <label htmlFor="widget-css" className="text-xs font-medium text-zinc-700">Custom CSS</label>
+        <p className="text-[11px] text-zinc-400 mt-0.5 mb-1.5">
+          Restyle or move anything: the button, the chat window, the messages. Your rules always win over ours, so
+          there's no need for <code>!important</code>. It applies on your site, not in this preview.
+        </p>
+        <textarea
+          id="widget-css"
+          value={customCss}
+          onChange={(e) => setCustomCss(e.target.value)}
+          rows={7}
+          maxLength={20_000}
+          spellCheck={false}
+          placeholder={CSS_EXAMPLE}
+          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-y"
+        />
+        <details className="mt-1.5 text-xs text-zinc-500">
+          <summary className="cursor-pointer select-none text-zinc-600 hover:text-zinc-900">Parts you can style</summary>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            {CSS_PARTS.map(([selector, what]) => (
+              <Fragment key={selector}>
+                <dt><code className="text-[11px] text-zinc-800">{selector}</code></dt>
+                <dd>{what}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </details>
+      </div>
+
       <button
         onClick={() => save()}
         disabled={saving || !greeting.trim() || !/^#[0-9a-fA-F]{6}$/.test(color) || !iconUrlValid}
@@ -777,6 +869,43 @@ function WidgetAppearanceCard({
     </div>
   )
 }
+
+const WIDGET_CORNERS: { value: WidgetPosition; label: string }[] = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'left', label: 'Bottom left' },
+  { value: 'right', label: 'Bottom right' },
+]
+
+const WIDGET_LAUNCHER_OPTIONS: { value: WidgetLauncher; label: string; hint: string }[] = [
+  { value: 'always', label: 'On every device', hint: 'The round chat button sits in the corner you picked.' },
+  { value: 'desktop', label: 'On computers only', hint: 'On phones, open the chat from your own button or menu instead.' },
+  { value: 'never', label: 'Never', hint: 'Only your own buttons open the chat.' },
+]
+
+const OWN_BUTTON_SNIPPET = '<button data-chatliox-open>Chat with us</button>'
+
+const CSS_EXAMPLE = `/* Example: a square button that sits higher on phones */
+.chatliox-launcher { border-radius: 14px; }
+@media (max-width: 640px) {
+  .chatliox { --chatliox-offset-y: 88px; }
+}`
+
+const CSS_PARTS: [string, string][] = [
+  ['.chatliox', 'Everything on your site. Set --chatliox-color, --chatliox-offset-x, --chatliox-offset-y, --chatliox-width, --chatliox-height or --chatliox-launcher-size here'],
+  ['.chatliox-launcher', 'The round chat button'],
+  ['.chatliox[data-open="true"]', 'While the chat is open'],
+  ['.chatliox-badge', 'Unread count on the button'],
+  ['.chatliox-frame', 'The chat window on your page'],
+  ['.chatliox-teaser', 'Proactive message pop-up'],
+  ['.chatliox-header', 'Top of the chat window'],
+  ['.chatliox-close', 'Close button inside the chat window'],
+  ['.chatliox-message--visitor', "The visitor's messages"],
+  ['.chatliox-message--team', "Your team's messages"],
+  ['.chatliox-team-message', 'Welcome messages'],
+  ['.chatliox-quick-reply', 'Quick-reply buttons'],
+  ['.chatliox-input, .chatliox-send', 'Message box and send button'],
+]
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 

@@ -188,6 +188,8 @@ async def update_widget(
         body.widget_height,
         body.widget_offset_x,
         body.widget_offset_y,
+        body.widget_launcher,
+        body.widget_custom_css,
     )
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")

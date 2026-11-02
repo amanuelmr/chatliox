@@ -4,7 +4,7 @@ import json
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Index, Integer, String, text
+from sqlalchemy import Boolean, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,7 +36,13 @@ class Organization(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         server_default="Send us a message and we'll get back to you shortly.",
     )
+    # "right", "left", "top-right" or "top-left"; plain sides mean the bottom corners.
     widget_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="right")
+    # When the built-in chat button shows: "always", "desktop" (sites bring their
+    # own button on phones) or "never" (only the site's own buttons open the chat).
+    widget_launcher: Mapped[str] = mapped_column(String(10), nullable=False, server_default="always")
+    # The team's own CSS for the launcher on their site and for the chat window.
+    widget_custom_css: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     widget_icon_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     widget_width: Mapped[int] = mapped_column(Integer, nullable=False, server_default="376")
     widget_height: Mapped[int] = mapped_column(Integer, nullable=False, server_default="600")

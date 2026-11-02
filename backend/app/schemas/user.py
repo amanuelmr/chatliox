@@ -15,6 +15,8 @@ class OrganizationInfo(BaseModel):
     widget_color: str
     widget_greeting: str
     widget_position: str
+    widget_launcher: str
+    widget_custom_css: str
     widget_icon_url: str | None
     widget_width: int
     widget_height: int

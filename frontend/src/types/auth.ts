@@ -1,4 +1,7 @@
-export type WidgetPosition = 'left' | 'right'
+// "left" and "right" are the bottom corners.
+export type WidgetPosition = 'left' | 'right' | 'top-left' | 'top-right'
+// When the built-in chat button shows; otherwise the site uses its own buttons.
+export type WidgetLauncher = 'always' | 'desktop' | 'never'
 
 // One entry per weekday, Monday first. Times are 24h "HH:MM" in the org's timezone.
 export interface BusinessHoursDay {
@@ -25,6 +28,8 @@ export interface Organization {
   widget_color: string
   widget_greeting: string
   widget_position: WidgetPosition
+  widget_launcher: WidgetLauncher
+  widget_custom_css: string
   widget_icon_url: string | null
   widget_width: number
   widget_height: number

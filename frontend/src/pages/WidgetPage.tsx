@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
 } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -158,8 +159,22 @@ export default function WidgetPage() {
       height: widgetConfig.widget_height,
       offsetX: widgetConfig.widget_offset_x,
       offsetY: widgetConfig.widget_offset_y,
+      launcher: widgetConfig.widget_launcher,
+      customCss: widgetConfig.widget_custom_css,
     })
   }, [isEmbedded, widgetConfig, brandColor])
+
+  // The team's custom CSS also styles the chat window itself. Added after the
+  // app's own styles, so its rules win at equal specificity.
+  const customCss = widgetConfig?.widget_custom_css ?? ''
+  useEffect(() => {
+    if (!customCss) return
+    const style = document.createElement('style')
+    style.id = 'chatliox-custom'
+    style.textContent = customCss
+    document.head.appendChild(style)
+    return () => style.remove()
+  }, [customCss])
 
   if (!widgetKey) {
     return (
@@ -185,10 +200,11 @@ export default function WidgetPage() {
 
   const panel = (
     <div
+      style={{ '--chatliox-color': brandColor } as CSSProperties}
       className={
         isEmbedded
-          ? 'w-full h-screen bg-white flex flex-col overflow-hidden'
-          : `pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
+          ? 'chatliox-panel w-full h-screen bg-white flex flex-col overflow-hidden'
+          : `chatliox-panel pointer-events-auto mb-16 w-[360px] h-[540px] bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden origin-bottom-right transition-all duration-300 ease-out ${
               isOpen
                 ? 'opacity-100 scale-100 translate-y-0'
                 : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
@@ -199,7 +215,6 @@ export default function WidgetPage() {
       <PanelHeader
         onClose={handleClose}
         adminName={adminName}
-        brandColor={brandColor}
         isOnline={isOnline}
         replyWithinMinutes={widgetConfig?.first_response_minutes ?? null}
       />
@@ -250,7 +265,7 @@ export default function WidgetPage() {
       <button
         onClick={() => setStandaloneOpen((v) => !v)}
         style={{ backgroundColor: brandColor }}
-        className="pointer-events-auto w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 flex-shrink-0"
+        className="chatliox-launcher pointer-events-auto w-14 h-14 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 flex-shrink-0"
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
       >
         <span className={`absolute transition-all duration-200 ${isOpen ? 'opacity-100 rotate-0' : 'opacity-0 rotate-90'}`}>
@@ -273,13 +288,11 @@ export default function WidgetPage() {
 function PanelHeader({
   onClose,
   adminName,
-  brandColor,
   isOnline,
   replyWithinMinutes,
 }: {
   onClose: () => void
   adminName: string | null
-  brandColor: string
   isOnline: boolean
   // The team's first-response target, shown as the expected reply time.
   replyWithinMinutes: number | null
@@ -288,7 +301,7 @@ function PanelHeader({
     ? 'We typically reply in a few minutes'
     : `Usually replies within ${formatMinutes(replyWithinMinutes)}`
   return (
-    <div style={{ backgroundColor: brandColor }} className="px-5 py-4 flex items-center justify-between flex-shrink-0">
+    <div className="chatliox-header bg-[var(--chatliox-color)] px-5 py-4 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -305,7 +318,7 @@ function PanelHeader({
       </div>
       <button
         onClick={onClose}
-        className="text-white/60 hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-white/20"
+        className="chatliox-close text-white/60 hover:text-white transition-all duration-200 p-1.5 rounded-lg hover:bg-white/20"
         aria-label="Close"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -398,7 +411,7 @@ function WelcomeView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div style={{ backgroundColor: brandColor }} className="px-5 pb-5">
+      <div className="chatliox-greeting bg-[var(--chatliox-color)] px-5 pb-5">
         <p className="text-white/60 text-xs leading-relaxed">{greeting}</p>
       </div>
 
@@ -485,8 +498,7 @@ function WelcomeView({
         <button
           onClick={() => startChat(firstMessage)}
           disabled={!canSubmit || isPending}
-          style={{ backgroundColor: brandColor }}
-          className="w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
+          className="chatliox-start bg-[var(--chatliox-color)] w-full disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-medium transition-all duration-200"
         >
           {isPending ? (
             <span className="flex items-center justify-center gap-2">
@@ -703,7 +715,7 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           <p className="text-center text-xs text-zinc-400 py-6">No messages yet.</p>
         )}
         {messages.filter((msg) => !msg.is_internal).map((msg) => (
-          <WidgetBubble key={msg.id} message={msg} brandColor={brandColor} />
+          <WidgetBubble key={msg.id} message={msg} />
         ))}
         <div ref={bottomRef} />
       </div>
@@ -798,14 +810,13 @@ function ChatView({ conversationId, visitorId, onAdminName, convStatus, onStatus
           }}
           placeholder={convStatus === 'closed' ? 'Reply to reopen…' : 'Type a message…'}
           rows={1}
-          className="flex-1 resize-none bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200 max-h-28"
+          className="chatliox-input flex-1 resize-none bg-zinc-50 rounded-xl px-3.5 py-2.5 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none focus:bg-white focus:ring-2 focus:ring-brand-100 transition-all duration-200 max-h-28"
         />
         <button
           type="submit"
           disabled={isPending || !content.trim()}
           aria-label={isPending ? 'Sending' : 'Send message'}
-          style={{ backgroundColor: brandColor }}
-          className="disabled:opacity-40 text-white rounded-xl px-3 py-2.5 transition-all duration-200 flex-shrink-0 flex items-center justify-center w-10"
+          className="chatliox-send bg-[var(--chatliox-color)] disabled:opacity-40 text-white rounded-xl px-3 py-2.5 transition-all duration-200 flex-shrink-0 flex items-center justify-center w-10"
         >
           {isPending ? (
             <Spinner size="xs" variant="white" />
@@ -994,16 +1005,15 @@ function WidgetAttachment({ message }: { message: Message }) {
   )
 }
 
-function WidgetBubble({ message, brandColor }: { message: Message; brandColor: string }) {
+function WidgetBubble({ message }: { message: Message }) {
   const isVisitor = message.sender_type === 'visitor'
   const isPending = message.id.startsWith('opt-')
 
   return (
     <div className={`flex transition-opacity duration-150 ${isVisitor ? 'justify-end' : 'justify-start'} ${isPending ? 'opacity-60' : 'opacity-100'}`}>
       <div
-        style={isVisitor ? { backgroundColor: brandColor } : undefined}
-        className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm ${
-          isVisitor ? 'text-white' : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
+        className={`chatliox-message ${isVisitor ? 'chatliox-message--visitor' : 'chatliox-message--team'} max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm ${
+          isVisitor ? 'text-white bg-[var(--chatliox-color)]' : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
         }`}
       >
         {message.attachment_url ? <WidgetAttachment message={message} /> : (

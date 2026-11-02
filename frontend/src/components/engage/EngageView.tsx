@@ -118,7 +118,7 @@ export default function EngageView() {
               brandColor={org.widget_color}
               teamName={org.name}
               greeting={org.widget_greeting}
-              position={org.widget_position === 'left' ? 'left' : 'right'}
+              position={org.widget_position}
               replyWithinMinutes={org.first_response_minutes}
               welcomeMessages={greeting}
               quickReplies={welcome.draft.quick_replies}
