@@ -1,10 +1,13 @@
-import { act, screen } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { applyMacro, getCannedResponses } from '@/api/cannedResponses'
 import { getConversations } from '@/api/conversations'
-import { getMessages } from '@/api/messages'
+import { getMessages, sendMessage } from '@/api/messages'
 import { useAuthStore } from '@/store/authStore'
 import { renderAt } from '@/test/render'
-import type { Conversation, WsEvent } from '@/types/chat'
+import type { CannedResponse } from '@/types/cannedResponse'
+import type { Conversation, Message, WsEvent } from '@/types/chat'
 import type { User } from '@/types/auth'
 import AdminChatWindow from './AdminChatWindow'
 
@@ -15,7 +18,7 @@ vi.mock('@/api/conversations', () => ({
   updateConversationTags: vi.fn(),
 }))
 vi.mock('@/api/messages', () => ({ getMessages: vi.fn(), sendMessage: vi.fn(), uploadAttachment: vi.fn() }))
-vi.mock('@/api/cannedResponses', () => ({ getCannedResponses: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/cannedResponses', () => ({ getCannedResponses: vi.fn(), applyMacro: vi.fn() }))
 
 // Lets the test play the server's side of the conversation socket.
 class FakeSocket {
@@ -37,16 +40,34 @@ const emit = (event: WsEvent) => act(() => FakeSocket.latest.onmessage?.({ data:
 const typing = (user_id: string, sender_type: 'admin' | 'visitor', name: string | null, is_typing = true) =>
   emit({ type: 'typing', user_id, sender_type, name, is_typing })
 
+const macro = (id: string, title: string, shortcut: string, content: string, patch: Partial<CannedResponse> = {}) =>
+  ({
+    id, title, shortcut, content, use_count: 0, created_at: '',
+    actions: { add_tags: [], assign: null, resolve: false },
+    ...patch,
+  }) as CannedResponse
+
+const MACROS = [
+  macro('m1', 'Greeting', 'hi', 'Hi there!'),
+  macro('m2', 'Refund policy', 'refund', 'Refunds take 5 days.', {
+    actions: { add_tags: ['refund'], assign: null, resolve: true },
+  }),
+  macro('m3', 'Spam', 'spam', '', { actions: { add_tags: ['spam'], assign: null, resolve: true } }),
+]
+
+async function openChat() {
+  useAuthStore.getState().setAuth('token', { id: 'me', full_name: 'Wes' } as User)
+  vi.mocked(getConversations).mockResolvedValue([
+    { id: 'c1', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [] } as unknown as Conversation,
+  ])
+  vi.mocked(getMessages).mockResolvedValue([])
+  vi.mocked(getCannedResponses).mockResolvedValue(MACROS)
+  renderAt(<AdminChatWindow conversationId="c1" />)
+  await screen.findAllByText('Vera')
+}
+
 describe('agent chat window', () => {
-  beforeEach(async () => {
-    useAuthStore.getState().setAuth('token', { id: 'me', full_name: 'Wes' } as User)
-    vi.mocked(getConversations).mockResolvedValue([
-      { id: 'c1', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [] } as unknown as Conversation,
-    ])
-    vi.mocked(getMessages).mockResolvedValue([])
-    renderAt(<AdminChatWindow conversationId="c1" />)
-    await screen.findAllByText('Vera')
-  })
+  beforeEach(openChat)
 
   it('shows which teammates also have the chat open, but not yourself', async () => {
     await emit({ type: 'viewers', agents: [ME] })
@@ -72,5 +93,70 @@ describe('agent chat window', () => {
     await emit({ type: 'viewers', agents: [ME] })
     expect(screen.queryByText(/typing a reply/)).not.toBeInTheDocument()
     expect(screen.getByText('Visitor is typing…')).toBeInTheDocument()
+  })
+})
+
+describe('saved replies in the reply box', () => {
+  beforeEach(async () => {
+    vi.mocked(applyMacro).mockReset()
+    vi.mocked(sendMessage).mockReset().mockResolvedValue({ id: 'sent' } as Message)
+    vi.mocked(applyMacro).mockResolvedValue({
+      conversation: { id: 'c1', visitor_name: 'Vera', status: 'closed', tags: ['refund'], pre_chat_answers: [] } as unknown as Conversation,
+      message: null,
+    })
+    await openChat()
+    // The saved replies load in the background; wait so "/" has something to match.
+    await vi.waitFor(() => expect(getCannedResponses).toHaveBeenCalled())
+  })
+
+  const reply = () => screen.getByLabelText('Reply')
+
+  it('finds a saved reply by "/" and its shortcut, picked from the keyboard', async () => {
+    await userEvent.type(reply(), '/re')
+    const menu = screen.getByRole('listbox', { name: 'Saved replies' })
+    // The shortcut match comes before "Greeting", which only matches by title.
+    expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      expect.stringContaining('Refund policy'),
+      expect.stringContaining('Greeting'),
+    ])
+
+    await userEvent.keyboard('{Enter}')
+    expect(reply()).toHaveValue('Refunds take 5 days.')
+    expect(screen.getByText('⚡ Refund policy')).toBeInTheDocument()
+    expect(screen.getByText('Adds #refund · Resolves')).toBeInTheDocument()
+
+    // The agent personalises the text, then sends; the actions run with it.
+    await userEvent.type(reply(), ' Sorry, Vera!')
+    await userEvent.click(screen.getByRole('button', { name: 'Send & apply' }))
+    expect(applyMacro).toHaveBeenCalledWith('m2', 'c1', 'Refunds take 5 days. Sorry, Vera!')
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('moves through matches with the arrow keys and closes with Escape', async () => {
+    await userEvent.type(reply(), '/')
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    expect(screen.getAllByRole('option')[2]).toHaveAttribute('aria-selected', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(reply()).toHaveValue('')
+  })
+
+  it('runs an actions-only macro without a reply', async () => {
+    await userEvent.type(reply(), '/spam{Enter}')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(applyMacro).toHaveBeenCalledWith('m3', 'c1', '')
+  })
+
+  it('sends plain text as an ordinary reply once the saved reply is dropped', async () => {
+    await userEvent.type(reply(), '/hi{Enter}')
+    await userEvent.click(screen.getByRole('button', { name: "Don't use this saved reply" }))
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(applyMacro).not.toHaveBeenCalled()
+    expect(vi.mocked(sendMessage).mock.calls[0][0]).toEqual(
+      expect.objectContaining({ content: 'Hi there!', conversation_id: 'c1' }),
+    )
   })
 })

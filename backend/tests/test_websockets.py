@@ -203,3 +203,23 @@ def test_internal_notes_reach_teammates_live(http: TestClient, setup: dict):
             while event["type"] != "message":
                 event = visitor.receive_json()
             assert event["content"] == "Hello"
+
+
+def test_a_macro_reaches_the_visitor_and_the_inbox(http: TestClient, setup: dict):
+    conv, visitor_id = setup["conv_id"], setup["visitor_id"]
+    headers = {"Authorization": f"Bearer {setup['token']}"}
+    macro = http.post(
+        "/canned-responses",
+        headers=headers,
+        json={"title": "Done", "content": "All sorted!", "actions": {"resolve": True}},
+    ).json()
+    before = _open()
+    with http.websocket_connect(f"/ws/dashboard?token={setup['token']}") as dashboard:
+        with http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}") as visitor:
+            _joined(before + 2)
+            http.post(f"/canned-responses/{macro['id']}/apply", headers=headers, json={"conversation_id": conv, "content": "All sorted!"})
+            assert visitor.receive_json()["content"] == "All sorted!"
+            assert visitor.receive_json() == {"type": "status", "status": "closed"}
+            # One inbox update with the end result, not one per step.
+            updated = dashboard.receive_json()
+            assert (updated["type"], updated["status"]) == ("conversation_updated", "closed")

@@ -8,4 +8,5 @@ afterEach(() => {
 })
 
 // jsdom doesn't do layout, so it has no scrolling.
-Element.prototype.scrollIntoView = () => {}
+// Like current Chrome, return a Promise, so an effect that returns it fails here too.
+Element.prototype.scrollIntoView = () => Promise.resolve()
