@@ -6,12 +6,13 @@ import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
 import { listNames } from '@/lib/teammates'
-import { describeBrowser, siteName } from '@/lib/visitor'
+import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import AssignMenu from '@/components/AssignMenu'
 import { MacroList, MacroPickerButton } from '@/components/MacroMenu'
 import PageTrail from '@/components/PageTrail'
+import { useLiveVisitors } from '@/components/VisitorsView'
 import Spinner from '@/components/Spinner'
 import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
@@ -62,6 +63,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   })
   const conv = conversations.find((c) => c.id === conversationId)
   const resolved = conv?.status === 'closed'
+  const { data: liveVisitors = [] } = useLiveVisitors()
+  const live = conv && liveVisitors.find((v) => v.visitor_id === conv.visitor_id)
+  const livePage = live?.pages[live.pages.length - 1]
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['messages', conversationId],
@@ -539,6 +543,17 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
               </p>
             </div>
 
+            {livePage && (
+              <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-2.5 py-2">
+                <span className="mt-1 w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" aria-hidden />
+                <p className="text-xs text-emerald-800 min-w-0">
+                  On the site now, viewing{' '}
+                  <a href={livePage.url} target="_blank" rel="noreferrer noopener" title={livePage.url} className="font-medium hover:underline break-words">
+                    {pageLabel(livePage)}
+                  </a>
+                </p>
+              </div>
+            )}
             <Field label="Email" value={conv?.visitor_email ?? '—'} />
             {conv?.visitor_user_agent && (
               <Field label="Browser" value={describeBrowser(conv.visitor_user_agent) ?? 'Unknown'} />

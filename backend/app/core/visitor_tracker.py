@@ -2,9 +2,13 @@
 WebSocket rooms. A visitor stays listed while any of their tabs has the widget loaded."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 # Pages kept per visitor, newest last.
 MAX_PAGES = 20
+# On a site without client-side routing every click reloads the widget, so a
+# visitor only counts as gone once no tab has reconnected for this long.
+GRACE_SECONDS = 30
 
 
 @dataclass
@@ -17,6 +21,8 @@ class LiveVisitor:
     # {"url", "title", "at"}
     pages: list[dict] = field(default_factory=list)
     connections: int = 0
+    # When their last tab closed; None while connected.
+    left_at: datetime | None = None
 
 
 class VisitorTracker:
@@ -30,16 +36,26 @@ class VisitorTracker:
         if visitor is None:
             visitor = visitors[visitor_id] = LiveVisitor(visitor_id, user_agent)
         visitor.connections += 1
+        visitor.left_at = None
         return visitor
 
-    def disconnected(self, org_id: str, visitor_id: str) -> bool:
-        """Returns True once the visitor's last tab has gone."""
-        visitors = self._orgs.get(org_id, {})
-        visitor = visitors.get(visitor_id)
+    def disconnected(self, org_id: str, visitor_id: str) -> datetime | None:
+        """Returns when the visitor's last tab closed, for passing to expire()
+        after the grace period, or None while other tabs are still open."""
+        visitor = self.get(org_id, visitor_id)
         if visitor is None:
-            return False
+            return None
         visitor.connections -= 1
         if visitor.connections > 0:
+            return None
+        visitor.left_at = datetime.now(timezone.utc)
+        return visitor.left_at
+
+    def expire(self, org_id: str, visitor_id: str, left_at: datetime) -> bool:
+        """Forgets the visitor unless they came back since leaving at left_at."""
+        visitors = self._orgs.get(org_id, {})
+        visitor = visitors.get(visitor_id)
+        if visitor is None or visitor.left_at != left_at:
             return False
         del visitors[visitor_id]
         if not visitors:
@@ -51,7 +67,7 @@ class VisitorTracker:
         visitor = self._orgs.get(org_id, {}).get(visitor_id)
         if visitor is None:
             return False
-        if visitor.referrer is None and not visitor.pages:
+        if not visitor.pages and referrer and urlparse(referrer).netloc != urlparse(page["url"]).netloc:
             visitor.referrer = referrer
         if visitor.pages and visitor.pages[-1]["url"] == page["url"]:
             return False

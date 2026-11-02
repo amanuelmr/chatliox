@@ -7,6 +7,7 @@ from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.visitor_tracker import MAX_PAGES, VisitorTracker, visitor_tracker
+from tests.conftest import token_from
 from tests.test_websockets import _joined, _open, http, setup  # noqa: F401  (fixtures)
 
 
@@ -63,6 +64,7 @@ def test_pages_seen_while_chatting_reach_the_inbox(http: TestClient, setup: dict
         _joined(before + 1)
         with http.websocket_connect(f"/ws/visitors?widget_key={setup['widget_key']}&visitor_id={visitor_id}") as ws:
             ws.send_json(_page("https://shop.test/checkout", "Checkout"))
+            assert dashboard.receive_json()["type"] == "visitor_updated"
             updated = dashboard.receive_json()
             assert (updated["type"], updated["id"]) == ("conversation_updated", conv)
             assert [p["title"] for p in updated["visitor_pages"]] == ["Checkout"]
@@ -81,14 +83,63 @@ def test_the_tracker_counts_tabs_and_keeps_recent_pages():
     tracker = VisitorTracker()
     tracker.connected("org", "v", "Firefox")
     tracker.connected("org", "v", "Firefox")
-    for n in range(MAX_PAGES + 5):
-        tracker.page_viewed("org", "v", {"url": f"https://a.test/{n}"}, "https://first.test/" if n == 0 else "https://later.test/")
+    tracker.page_viewed("org", "v", {"url": "https://a.test/0"}, "https://search.test/")
+    for n in range(1, MAX_PAGES + 5):
+        tracker.page_viewed("org", "v", {"url": f"https://a.test/{n}"}, f"https://a.test/{n - 1}")
     visitor = tracker.get("org", "v")
     assert len(visitor.pages) == MAX_PAGES
     assert visitor.pages[-1]["url"] == f"https://a.test/{MAX_PAGES + 4}"
-    assert visitor.referrer == "https://first.test/"
+    assert visitor.referrer == "https://search.test/"
 
-    assert tracker.disconnected("org", "v") is False
+    assert tracker.disconnected("org", "v") is None
+    assert tracker.disconnected("org", "v") is not None
+
+
+def test_a_visitor_moving_to_the_next_page_is_not_forgotten():
+    tracker = VisitorTracker()
+    tracker.connected("org", "v", None)
+    tracker.page_viewed("org", "v", {"url": "https://a.test/"}, None)
+    left_at = tracker.disconnected("org", "v")
+    # The next page loads the widget again before the grace period runs out.
+    tracker.connected("org", "v", None)
+    assert tracker.expire("org", "v", left_at) is False
+    assert [p["url"] for p in tracker.get("org", "v").pages] == ["https://a.test/"]
+
+    left_at = tracker.disconnected("org", "v")
     assert [v.visitor_id for v in tracker.online("org")] == ["v"]
-    assert tracker.disconnected("org", "v") is True
+    assert tracker.expire("org", "v", left_at) is True
     assert tracker.online("org") == []
+
+
+def test_a_referrer_from_the_same_site_is_not_where_they_came_from():
+    tracker = VisitorTracker()
+    tracker.connected("org", "v", None)
+    tracker.page_viewed("org", "v", {"url": "https://a.test/pricing"}, "https://a.test/")
+    assert tracker.get("org", "v").referrer is None
+
+
+def test_the_team_sees_who_is_on_the_site_live(http: TestClient, setup: dict, sent_emails: list[dict]):
+    headers = {"Authorization": f"Bearer {setup['token']}"}
+    visitor_id = str(uuid.uuid4())
+    assert http.get("/visitors").status_code == 401
+    before = _open()
+    with http.websocket_connect(f"/ws/dashboard?token={setup['token']}") as dashboard:
+        _joined(before + 1)
+        with http.websocket_connect(f"/ws/visitors?widget_key={setup['widget_key']}&visitor_id={visitor_id}") as ws:
+            ws.send_json(_page("https://shop.test/", "Shop", referrer="https://search.test/"))
+            event = dashboard.receive_json()
+            assert (event["type"], event["visitor_id"], event["referrer"]) == ("visitor_updated", visitor_id, "https://search.test/")
+            ws.send_json(_page("https://shop.test/boots", "Boots"))
+            assert [p["title"] for p in dashboard.receive_json()["pages"]] == ["Shop", "Boots"]
+
+            live = http.get("/visitors", headers=headers).json()
+            assert [(v["visitor_id"], v["pages"][-1]["title"]) for v in live] == [(visitor_id, "Boots")]
+            assert live[0]["user_agent"] == "testclient"
+
+            # Another team never sees them.
+            http.post(
+                "/auth/register",
+                json={"email": f"o-{uuid.uuid4().hex[:8]}@example.com", "password": "s3cret-pass", "full_name": "O", "org_name": "Other"},
+            )
+            other = http.post("/auth/verify-email", json={"token": token_from(sent_emails[-1]["url"])}).json()["access_token"]
+            assert http.get("/visitors", headers={"Authorization": f"Bearer {other}"}).json() == []

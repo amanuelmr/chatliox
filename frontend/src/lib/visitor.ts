@@ -1,4 +1,4 @@
-import type { PageView } from '@/types/chat'
+import type { Conversation, PageView } from '@/types/chat'
 
 const BROWSERS: [string, RegExp][] = [
   ['Edge', /Edg(?:A|iOS)?\/(\d+)/],
@@ -51,4 +51,18 @@ export function pageLabel(page: PageView): string {
 
 export function siteName(url: string): string {
   return parse(url)?.hostname.replace(/^www\./, '') ?? url
+}
+
+// The visitor's most recent chat, if they've started one.
+export function latestChat(visitorId: string, conversations: Conversation[]): Conversation | undefined {
+  return conversations
+    .filter((c) => c.visitor_id === visitorId)
+    .reduce<Conversation | undefined>((latest, c) => (!latest || c.created_at > latest.created_at ? c : latest), undefined)
+}
+
+// "Just now", "4m", "1h 20m": how long someone has been on the site.
+export function timeOnSite(arrivedAt: string, now: number): string {
+  const minutes = Math.floor((now - new Date(arrivedAt).getTime()) / 60_000)
+  if (minutes < 1) return 'Just now'
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }

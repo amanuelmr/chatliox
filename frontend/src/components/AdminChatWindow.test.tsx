@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyMacro, getCannedResponses } from '@/api/cannedResponses'
 import { getConversations } from '@/api/conversations'
 import { getMessages, sendMessage } from '@/api/messages'
+import { getLiveVisitors } from '@/api/visitors'
 import { useAuthStore } from '@/store/authStore'
 import { renderAt } from '@/test/render'
 import type { CannedResponse } from '@/types/cannedResponse'
 import type { Conversation, Message, WsEvent } from '@/types/chat'
 import type { User } from '@/types/auth'
+import type { LiveVisitor } from '@/types/visitor'
 import AdminChatWindow from './AdminChatWindow'
 
 vi.mock('@/api/conversations', () => ({
@@ -19,6 +21,7 @@ vi.mock('@/api/conversations', () => ({
 }))
 vi.mock('@/api/messages', () => ({ getMessages: vi.fn(), sendMessage: vi.fn(), uploadAttachment: vi.fn() }))
 vi.mock('@/api/cannedResponses', () => ({ getCannedResponses: vi.fn(), applyMacro: vi.fn() }))
+vi.mock('@/api/visitors', () => ({ getLiveVisitors: vi.fn() }))
 
 // Lets the test play the server's side of the conversation socket.
 class FakeSocket {
@@ -55,11 +58,12 @@ const MACROS = [
   macro('m3', 'Spam', 'spam', '', { actions: { add_tags: ['spam'], assign: null, resolve: true } }),
 ]
 
-async function openChat(patch: Partial<Conversation> = {}) {
+async function openChat(patch: Partial<Conversation> = {}, live: LiveVisitor[] = []) {
   useAuthStore.getState().setAuth('token', { id: 'me', full_name: 'Wes' } as User)
   vi.mocked(getConversations).mockResolvedValue([
-    { id: 'c1', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [], visitor_pages: [], ...patch } as Conversation,
+    { id: 'c1', visitor_id: 'vera', visitor_name: 'Vera', status: 'open', tags: [], pre_chat_answers: [], visitor_pages: [], ...patch } as Conversation,
   ])
+  vi.mocked(getLiveVisitors).mockResolvedValue(live)
   vi.mocked(getMessages).mockResolvedValue([])
   vi.mocked(getCannedResponses).mockResolvedValue(MACROS)
   renderAt(<AdminChatWindow conversationId="c1" />)
@@ -128,6 +132,21 @@ describe('visitor details', () => {
     // Newest first; a page without a title is shown by its path.
     const trail = within(screen.getByRole('list', { name: 'Pages viewed' }))
     expect(trail.getAllByRole('link').map((a) => a.textContent)).toEqual(['/boots?size=9', 'Shop'])
+    expect(screen.queryByText(/On the site now/)).not.toBeInTheDocument()
+  })
+
+  it('says which page the visitor is on while they are still on the site', async () => {
+    await openChat({}, [
+      {
+        visitor_id: 'vera', arrived_at: '', user_agent: null, referrer: null,
+        pages: [
+          { url: 'https://shop.test/', title: 'Shop', at: '' },
+          { url: 'https://shop.test/checkout', title: 'Checkout', at: '' },
+        ],
+      },
+    ])
+    expect(await screen.findByText(/On the site now, viewing/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Checkout' })).toHaveAttribute('href', 'https://shop.test/checkout')
   })
 })
 
