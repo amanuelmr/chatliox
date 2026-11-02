@@ -8,7 +8,7 @@ interface Props {
 const SIZE = { xs: 'w-3 h-3 border-[1.5px]', sm: 'w-4 h-4 border-2' }
 const COLOR = {
   white: 'border-white/30 border-t-white',
-  brand: 'border-brand-200 border-t-brand-500',
+  brand: 'border-brand-100 border-t-brand-500',
   muted: 'border-zinc-200 border-t-zinc-500',
 }
 
