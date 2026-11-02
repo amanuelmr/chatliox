@@ -162,11 +162,9 @@ function Hero() {
 }
 
 function DeveloperSection() {
-  const snippet = `<!-- Add to your site's <head> -->
-<script>
-  window.chatliox = { widgetKey: "YOUR_WIDGET_KEY" };
-</script>
-<script src="https://cdn.chatliox.io/widget.js" async></script>`
+  const snippet = `<!-- Add before </body> on every page -->
+<script src="https://cdn.chatliox.io/widget.js"
+        data-widget-key="YOUR_WIDGET_KEY" async></script>`
 
   const [copied, setCopied] = useState(false)
   const copy = () => {
