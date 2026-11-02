@@ -6,16 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_optional_user
 from app.core.limiter import limiter
-from app.core.ws_manager import manager as ws_manager
 from app.models.conversation import ConversationStatus
 from app.models.message import Message, SenderType
 from app.models.user import User
-from app.schemas.conversation import ConversationResponse
 from app.schemas.message import CreateMessageRequest, MessageResponse
 from app.services.conversation import get_conversation, get_conversation_with_assignee
 from app.services.message import create_message
+from app.services.realtime import publish_conversation, publish_message, publish_status
 from app.services.storage import save_attachment
-from app.websockets.router import org_room
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
@@ -69,26 +67,18 @@ async def _broadcast_new_message(
     was_closed: bool,
     is_internal: bool,
 ) -> None:
-    payload = {"type": "message", **MessageResponse.model_validate(message).model_dump(mode="json")}
+    # Notes reach teammates live but never the visitor's socket.
+    await publish_message(message)
     if is_internal:
-        # Notes reach teammates live but never the visitor's socket.
-        await ws_manager.broadcast_to_agents(str(conversation_id), payload)
         return
-    await ws_manager.broadcast(str(conversation_id), payload)
-
-    # Visitor reply to a resolved conversation — broadcast the reopen so widget updates live
-    if sender_type == SenderType.VISITOR and was_closed:
-        await ws_manager.broadcast(str(conversation_id), {"type": "status", "status": "waiting"})
 
     conv_for_broadcast = await get_conversation_with_assignee(db, conversation_id)
-    if conv_for_broadcast is not None:
-        await ws_manager.broadcast(
-            org_room(conv_for_broadcast.organization_id),
-            {
-                "type": "conversation_updated",
-                **ConversationResponse.model_validate(conv_for_broadcast).model_dump(mode="json"),
-            },
-        )
+    if conv_for_broadcast is None:
+        return
+    # Visitor reply to a resolved conversation — broadcast the reopen so widget updates live
+    if sender_type == SenderType.VISITOR and was_closed:
+        await publish_status(conv_for_broadcast)
+    await publish_conversation(conv_for_broadcast)
 
 
 @router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)

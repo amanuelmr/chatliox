@@ -1,5 +1,10 @@
 import client from './client'
-import type { CannedResponse, CreateCannedResponseRequest, UpdateCannedResponseRequest } from '@/types/cannedResponse'
+import type {
+  ApplyMacroResponse,
+  CannedResponse,
+  CreateCannedResponseRequest,
+  UpdateCannedResponseRequest,
+} from '@/types/cannedResponse'
 
 export const getCannedResponses = (): Promise<CannedResponse[]> =>
   client.get<CannedResponse[]>('/canned-responses').then((r) => r.data)
@@ -12,3 +17,9 @@ export const updateCannedResponse = (id: string, data: UpdateCannedResponseReque
 
 export const deleteCannedResponse = (id: string): Promise<void> =>
   client.delete(`/canned-responses/${id}`).then(() => undefined)
+
+// Sends the (possibly edited) reply and runs the saved reply's actions on the conversation.
+export const applyMacro = (id: string, conversationId: string, content: string): Promise<ApplyMacroResponse> =>
+  client
+    .post<ApplyMacroResponse>(`/canned-responses/${id}/apply`, { conversation_id: conversationId, content })
+    .then((r) => r.data)

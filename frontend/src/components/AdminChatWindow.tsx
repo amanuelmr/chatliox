@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getCannedResponses } from '@/api/cannedResponses'
+import { applyMacro, getCannedResponses } from '@/api/cannedResponses'
 import { emailTranscript, getConversations, updateConversationStatus, updateConversationTags } from '@/api/conversations'
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
+import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
 import { listNames } from '@/lib/teammates'
 import { useAuthStore } from '@/store/authStore'
 import { usePresenceStore } from '@/store/presenceStore'
 import AssignMenu from '@/components/AssignMenu'
+import { MacroList, MacroPickerButton } from '@/components/MacroMenu'
 import Spinner from '@/components/Spinner'
 import { apiErrorMessage } from '@/lib/apiError'
 import { apiWsUrl } from '@/lib/ws'
+import type { CannedResponse } from '@/types/cannedResponse'
 import type { Conversation, ConversationStatus, Message, WsEvent } from '@/types/chat'
 
 type InputMode = 'reply' | 'note'
@@ -42,6 +45,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [content, setContent] = useState('')
+  // The saved reply picked for this message; sending runs its actions too.
+  const [macro, setMacro] = useState<CannedResponse | null>(null)
+  const [highlight, setHighlight] = useState(0)
   const [mode, setMode] = useState<InputMode>('reply')
   const [connected, setConnected] = useState(false)
 
@@ -154,6 +160,49 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     },
   })
 
+  const { data: macros = [] } = useQuery({
+    queryKey: ['canned-responses'],
+    queryFn: getCannedResponses,
+  })
+  const query = mode === 'reply' && !macro ? slashQuery(content) : null
+  const matches = query === null ? [] : matchMacros(macros, query)
+  useEffect(() => {
+    setHighlight(0)
+  }, [query])
+
+  // Macros send a public reply, so they don't apply to internal notes.
+  useEffect(() => { if (mode === 'note') setMacro(null) }, [mode])
+
+  // Each conversation starts with an empty reply box.
+  useEffect(() => { setMacro(null); setContent('') }, [conversationId])
+
+  const pickMacro = (m: CannedResponse) => {
+    setMode('reply')
+    setMacro(m)
+    // A "/command" is replaced by the reply; other text is kept and the reply added below.
+    setContent((prev) => (slashQuery(prev) !== null || !prev.trim() ? m.content : m.content ? `${prev}\n${m.content}` : prev))
+  }
+
+  const {
+    mutate: runMacro,
+    isPending: runningMacro,
+    error: macroError,
+    reset: resetMacroError,
+  } = useMutation({
+    mutationFn: ({ macro, text }: { macro: CannedResponse; text: string }) => applyMacro(macro.id, conversationId, text),
+    onSuccess: ({ conversation, message }) => {
+      if (message) appendMsg(message)
+      queryClient.setQueryData<Conversation[]>(['conversations'], (convs = []) =>
+        convs.map((c) => (c.id === conversation.id ? conversation : c)),
+      )
+      // Assignment notes and the use count changed too.
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] })
+      queryClient.invalidateQueries({ queryKey: ['canned-responses'] })
+      setMacro(null)
+      setContent('')
+    },
+  })
+
   const {
     mutate: sendTranscript,
     isPending: sendingTranscript,
@@ -201,7 +250,15 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const text = content.trim()
-    if (!text || resolved) return
+    if (resolved) return
+    if (macro) {
+      if (!text && !hasActions(macro.actions)) return
+      if (typingTimer.current) clearTimeout(typingTimer.current)
+      sendTyping(false)
+      runMacro({ macro, text })
+      return
+    }
+    if (!text || slashQuery(text) !== null) return
     if (mode === 'reply') { if (typingTimer.current) clearTimeout(typingTimer.current); sendTyping(false) }
     setContent('')
     send({ conversation_id: conversationId, content: text, sender_type: 'admin', is_internal: mode === 'note' })
@@ -225,9 +282,32 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
     upload({ conversation_id: conversationId, sender_type: 'admin', file, is_internal: mode === 'note' })
   }
 
-  const insertCannedResponse = (text: string) => {
-    setContent((prev) => (prev.trim() ? `${prev}\n${text}` : text))
+  const onComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (matches.length > 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const step = e.key === 'ArrowDown' ? 1 : -1
+        setHighlight((h) => (h + step + matches.length) % matches.length)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        pickMacro(matches[highlight] ?? matches[0])
+        return
+      }
+    }
+    if (e.key === 'Escape' && (query !== null || macro)) {
+      e.preventDefault()
+      if (query !== null) setContent('')
+      else setMacro(null)
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(e as unknown as FormEvent) }
   }
+
+  const macroActions = macro ? describeActions(macro.actions) : []
+  // A half-typed "/command" isn't a reply.
+  const canSend = macro ? Boolean(content.trim()) || macroActions.length > 0 : Boolean(content.trim()) && query === null
 
   return (
     // Outer container sits on the zinc-100 canvas from AdminDashboard
@@ -341,6 +421,23 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
                 </span>
               )}
             </div>
+            {macro && (
+              <div className="mx-4 mt-2 flex items-center gap-2 text-xs bg-brand-50 text-brand-700 rounded-lg px-3 py-1.5">
+                <span className="font-semibold truncate">⚡ {macro.title}</span>
+                {macroActions.length > 0 && <span className="truncate text-brand-600">{macroActions.join(' · ')}</span>}
+                <button
+                  type="button"
+                  onClick={() => { setMacro(null); resetMacroError() }}
+                  aria-label="Don't use this saved reply"
+                  className="ml-auto flex-shrink-0 text-brand-400 hover:text-brand-700"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {macroError && (
+              <p className="mx-4 mt-2 text-xs text-red-500">{apiErrorMessage(macroError, "Couldn't apply the saved reply.")}</p>
+            )}
             <form onSubmit={submit} className="flex items-end gap-3 px-4 pb-4 pt-2">
               <input
                 ref={fileInputRef}
@@ -362,27 +459,46 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
                   </svg>
                 )}
               </button>
-              <CannedResponsePicker disabled={resolved} onPick={insertCannedResponse} />
-              <textarea
-                value={content}
-                onChange={onChange}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(e as unknown as FormEvent) } }}
-                placeholder={mode === 'note' ? 'Write an internal note… (never sent to visitor)' : 'Reply to visitor… (Enter to send)'}
-                rows={2}
-                className={`flex-1 resize-none rounded-xl px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition-all duration-200 max-h-40 ${
-                  mode === 'note'
-                    ? 'bg-amber-100/60 text-amber-900 ring-1 ring-amber-300 focus:ring-amber-400 placeholder:text-amber-400'
-                    : 'bg-zinc-50 text-zinc-800 ring-1 ring-zinc-200 focus:ring-zinc-300 focus:bg-white'
-                }`}
-              />
+              <MacroPickerButton disabled={resolved} onPick={pickMacro} />
+              <div className="relative flex-1 min-w-0">
+                {query !== null && (
+                  <div className="absolute bottom-full left-0 mb-2 w-full max-w-sm max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg ring-1 ring-zinc-200 z-10">
+                    <MacroList
+                      macros={matches}
+                      highlight={highlight}
+                      onHighlight={setHighlight}
+                      onPick={pickMacro}
+                      empty={macros.length === 0 ? 'No saved replies yet. Add some in Settings.' : `No saved reply matches /${query}`}
+                    />
+                  </div>
+                )}
+                <textarea
+                  value={content}
+                  onChange={onChange}
+                  onKeyDown={onComposerKeyDown}
+                  aria-label={mode === 'note' ? 'Internal note' : 'Reply'}
+                  placeholder={mode === 'note' ? 'Write an internal note… (never sent to visitor)' : 'Reply to visitor… (Enter to send, / for saved replies)'}
+                  rows={2}
+                  className={`w-full block resize-none rounded-xl px-4 py-3 text-sm placeholder:text-zinc-400 outline-none transition-all duration-200 max-h-40 ${
+                    mode === 'note'
+                      ? 'bg-amber-100/60 text-amber-900 ring-1 ring-amber-300 focus:ring-amber-400 placeholder:text-amber-400'
+                      : 'bg-zinc-50 text-zinc-800 ring-1 ring-zinc-200 focus:ring-zinc-300 focus:bg-white'
+                  }`}
+                />
+              </div>
               <button
                 type="submit"
-                disabled={isPending || !content.trim()}
+                disabled={isPending || runningMacro || !canSend}
                 className={`flex-shrink-0 disabled:opacity-40 text-white rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
                   mode === 'note' ? 'bg-amber-500 hover:bg-amber-400' : 'bg-brand-500 hover:bg-brand-600'
                 }`}
               >
-                {isPending ? (
+                {runningMacro ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner size="xs" variant="white" />
+                    <span>Applying…</span>
+                  </span>
+                ) : macro && macroActions.length > 0 ? (content.trim() ? 'Send & apply' : 'Apply') : isPending ? (
                   <span className="inline-flex items-center gap-2">
                     <Spinner size="xs" variant="white" />
                     <span>{mode === 'note' ? 'Adding note…' : 'Sending…'}</span>
@@ -508,66 +624,6 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
           </div>
         </div>
       </aside>
-    </div>
-  )
-}
-
-function CannedResponsePicker({ disabled, onPick }: { disabled: boolean; onPick: (content: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  const { data: responses = [] } = useQuery({
-    queryKey: ['canned-responses'],
-    queryFn: getCannedResponses,
-    enabled: open,
-  })
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative flex-shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={disabled}
-        title="Insert saved reply"
-        className="w-10 h-[46px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-all duration-150 disabled:opacity-40"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg ring-1 ring-zinc-200 z-10">
-          {responses.length === 0 ? (
-            <p className="text-xs text-zinc-400 text-center py-6 px-4">
-              No saved replies yet. Add some in Settings.
-            </p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">
-              {responses.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => { onPick(r.content); setOpen(false) }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors"
-                  >
-                    <p className="text-xs font-semibold text-zinc-900">{r.title}</p>
-                    <p className="text-xs text-zinc-400 truncate">{r.content}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
     </div>
   )
 }

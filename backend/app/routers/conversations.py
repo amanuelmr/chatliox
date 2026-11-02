@@ -38,6 +38,7 @@ from app.services.business_hours import is_within_business_hours
 from app.services.message import get_messages
 from app.services.organization import get_organization_by_id, get_organization_by_widget_key
 from app.services.pre_chat import PreChatError, collect_pre_chat_answers
+from app.services.realtime import publish_conversation, publish_message
 from app.services.transcript import email_transcript
 from app.services.user import get_user_by_id
 from app.websockets.router import org_room
@@ -183,14 +184,9 @@ async def update_assignee(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The chat is already assigned that way")
 
     note = await assign_conversation(db, conv, current_user, assignee, body.note)
-    await ws_manager.broadcast_to_agents(
-        str(conversation_id), {"type": "message", **MessageResponse.model_validate(note).model_dump(mode="json")}
-    )
+    await publish_message(note)
     updated = await get_conversation_with_assignee(db, conversation_id)
-    await ws_manager.broadcast(
-        org_room(updated.organization_id),
-        {"type": "conversation_updated", **ConversationResponse.model_validate(updated).model_dump(mode="json")},
-    )
+    await publish_conversation(updated)
     return updated
 
 

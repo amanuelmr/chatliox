@@ -2,6 +2,7 @@ import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
+import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
@@ -105,5 +106,44 @@ describe('responseClock', () => {
     expect(responseClock(start, 10, at(8.5))).toEqual({ overdue: false, urgent: true, label: '2m left' })
     expect(responseClock(start, 10, at(25))).toEqual({ overdue: true, urgent: true, label: '15m overdue' })
     expect(responseClock(start, 10, at(100)).label).toBe('1h 30m overdue')
+  })
+})
+
+describe('saved reply helpers', () => {
+  const macro = (title: string, shortcut: string | null, use_count = 0) => ({
+    id: title,
+    title,
+    content: '',
+    shortcut,
+    use_count,
+    created_at: '',
+    actions: { add_tags: [], assign: null, resolve: false },
+  })
+
+  it('reads a slash command only while it is all the reply box holds', () => {
+    expect(slashQuery('/')).toBe('')
+    expect(slashQuery('/Ref')).toBe('ref')
+    expect(slashQuery('/ref more')).toBeNull()
+    expect(slashQuery('hi /ref')).toBeNull()
+  })
+
+  it('ranks shortcut matches over title matches, most used first', () => {
+    const list = [macro('Refund policy', 'refund', 1), macro('Late refund', 'late', 9), macro('Return label', 'ret', 5)]
+    expect(matchMacros(list, 're').map((m) => m.title)).toEqual(['Return label', 'Refund policy', 'Late refund'])
+    expect(matchMacros(list, '').map((m) => m.title)).toEqual(['Late refund', 'Return label', 'Refund policy'])
+    expect(matchMacros(list, 'zzz')).toEqual([])
+  })
+
+  it('describes actions in the order they run', () => {
+    expect(describeActions({ add_tags: ['refund', 'billing'], assign: 'me', resolve: true })).toEqual([
+      'Assigns you',
+      'Adds #refund #billing',
+      'Resolves',
+    ])
+    expect(describeActions({ add_tags: [], assign: null, resolve: false })).toEqual([])
+  })
+
+  it('parses a tag list', () => {
+    expect(parseTags(' refund, #billing,, refund ')).toEqual(['refund', 'billing'])
   })
 })
