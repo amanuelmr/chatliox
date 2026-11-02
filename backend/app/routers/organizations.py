@@ -2,7 +2,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -22,6 +22,7 @@ from app.services.organization import (
     get_organization_by_widget_key,
     rotate_invite_token,
     update_auto_assign,
+    update_response_target,
     update_business_hours,
     update_pre_chat_form,
     update_widget_config,
@@ -233,6 +234,23 @@ async def set_auto_assign(
     current_user: User = Depends(require_admin),
 ) -> OrganizationInfo:
     org = await update_auto_assign(db, current_user.organization_id, body.auto_assign)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    return org
+
+
+class UpdateResponseTargetRequest(BaseModel):
+    # None turns the target off.
+    first_response_minutes: int | None = Field(default=None, ge=1, le=1440)
+
+
+@router.put("/response-target", response_model=OrganizationInfo)
+async def set_response_target(
+    body: UpdateResponseTargetRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> OrganizationInfo:
+    org = await update_response_target(db, current_user.organization_id, body.first_response_minutes)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org

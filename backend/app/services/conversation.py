@@ -26,6 +26,7 @@ async def create_conversation(
         visitor_email=visitor_email,
         pre_chat_answers=pre_chat_answers or [],
         status=ConversationStatus.WAITING,
+        waiting_since=datetime.now(timezone.utc),
         organization_id=organization_id,
         assigned_to_id=assigned_to_id,
     )
@@ -102,6 +103,10 @@ async def update_conversation_status(
     conv = result.scalar_one_or_none()
     if conv is None:
         return None
+    if new_status == ConversationStatus.WAITING and conv.status != ConversationStatus.WAITING:
+        conv.waiting_since = datetime.now(timezone.utc)
+    elif new_status != ConversationStatus.WAITING:
+        conv.waiting_since = None
     conv.status = new_status
     await db.commit()
     await db.refresh(conv)

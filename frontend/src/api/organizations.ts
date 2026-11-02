@@ -25,6 +25,7 @@ export interface WidgetConfig {
   pre_chat_name: FieldRequirement
   pre_chat_email: FieldRequirement
   pre_chat_fields: PreChatField[]
+  first_response_minutes: number | null
   is_online: boolean
 }
 
@@ -82,6 +83,9 @@ export const updatePreChatForm = (data: UpdatePreChatFormRequest): Promise<Organ
 
 export const updateAutoAssign = (autoAssign: boolean): Promise<Organization> =>
   client.put<Organization>('/organizations/auto-assign', { auto_assign: autoAssign }).then((r) => r.data)
+
+export const updateResponseTarget = (minutes: number | null): Promise<Organization> =>
+  client.put<Organization>('/organizations/response-target', { first_response_minutes: minutes }).then((r) => r.data)
 
 export const getTeammates = (): Promise<Teammate[]> =>
   client.get<Teammate[]>('/organizations/teammates').then((r) => r.data)

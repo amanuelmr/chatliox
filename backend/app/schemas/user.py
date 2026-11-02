@@ -28,6 +28,7 @@ class OrganizationInfo(BaseModel):
     pre_chat_email: str
     pre_chat_fields: list[dict]
     auto_assign: bool
+    first_response_minutes: int | None
 
 
 class UserResponse(BaseModel):

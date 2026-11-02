@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
+import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
 import { apiWsUrl } from './ws'
 
@@ -82,5 +83,27 @@ describe('listNames', () => {
     expect(listNames(['Sam', 'Ana'])).toBe('Sam and Ana')
     expect(listNames(['Sam', 'Ana', 'Lee'])).toBe('Sam, Ana and Lee')
     expect(listNames(['Sam', 'Ana', 'Lee', 'Bo'])).toBe('Sam, Ana and 2 others')
+  })
+})
+
+describe('formatMinutes', () => {
+  it('spells out minutes and hours', () => {
+    expect(formatMinutes(1)).toBe('1 minute')
+    expect(formatMinutes(15)).toBe('15 minutes')
+    expect(formatMinutes(60)).toBe('1 hour')
+    expect(formatMinutes(90)).toBe('1 hour 30 minutes')
+    expect(formatMinutes(120)).toBe('2 hours')
+  })
+})
+
+describe('responseClock', () => {
+  const start = '2026-11-02T10:00:00Z'
+  const at = (minutes: number) => new Date(start).getTime() + minutes * 60_000
+
+  it('counts down to the target, then up past it', () => {
+    expect(responseClock(start, 10, at(2))).toEqual({ overdue: false, urgent: false, label: '8m left' })
+    expect(responseClock(start, 10, at(8.5))).toEqual({ overdue: false, urgent: true, label: '2m left' })
+    expect(responseClock(start, 10, at(25))).toEqual({ overdue: true, urgent: true, label: '15m overdue' })
+    expect(responseClock(start, 10, at(100)).label).toBe('1h 30m overdue')
   })
 })

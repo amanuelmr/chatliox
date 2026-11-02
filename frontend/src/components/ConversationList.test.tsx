@@ -22,14 +22,18 @@ const chat = (id: string, patch: Partial<Conversation>): Conversation => ({
   created_at: minutesAgo(1),
   assigned_to_id: null,
   assigned_to_name: null,
+  waiting_since: null,
   tags: [],
   csat_rating: null,
   pre_chat_answers: [],
   ...patch,
 })
 
-function signIn() {
-  useAuthStore.getState().setAuth('token', { id: 'me' } as User)
+function signIn(firstResponseMinutes: number | null = null) {
+  useAuthStore.getState().setAuth('token', {
+    id: 'me',
+    organization: { first_response_minutes: firstResponseMinutes },
+  } as User)
 }
 
 async function showList(conversations: Conversation[]) {
@@ -70,5 +74,25 @@ describe('inbox views', () => {
     renderAt(<ConversationList onSelect={() => {}} />)
     expect(await screen.findByText('Nothing assigned to you.')).toBeInTheDocument()
     expect(listed('Una')).toBe(false)
+  })
+})
+
+describe('first-response clock', () => {
+  it('counts waiting chats down to the target and flags overdue ones', async () => {
+    signIn(10)
+    await showList([
+      chat('Fresh', { status: 'waiting', waiting_since: minutesAgo(3) }),
+      chat('Late', { status: 'waiting', waiting_since: minutesAgo(25) }),
+      chat('Answered', {}),
+    ])
+    expect(screen.getByText('7m left')).toBeInTheDocument()
+    expect(screen.getByText('15m overdue')).toBeInTheDocument()
+    expect(screen.getAllByTitle('Time against your first-response target')).toHaveLength(2)
+  })
+
+  it('stays hidden without a target', async () => {
+    signIn(null)
+    await showList([chat('Fresh', { status: 'waiting', waiting_since: minutesAgo(3) })])
+    expect(screen.queryByTitle('Time against your first-response target')).not.toBeInTheDocument()
   })
 })

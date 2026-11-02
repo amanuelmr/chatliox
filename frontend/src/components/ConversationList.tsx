@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getConversations } from '@/api/conversations'
+import { useNow } from '@/hooks/useNow'
+import { responseClock, type ResponseClock } from '@/lib/responseTime'
 import { useAuthStore } from '@/store/authStore'
 import type { Conversation, ConversationStatus } from '@/types/chat'
 
@@ -73,6 +75,8 @@ export default function ConversationList({ activeId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const [view, setViewState] = useState<View>(savedView)
   const user = useAuthStore((s) => s.user)
+  const target = user?.organization.first_response_minutes ?? null
+  const now = useNow()
 
   const setView = (v: View) => {
     setViewState(v)
@@ -203,6 +207,7 @@ export default function ConversationList({ activeId, onSelect }: Props) {
             isActive={c.id === activeId}
             onClick={() => onSelect(c.id)}
             onTagClick={setActiveTag}
+            clock={c.status === 'waiting' && c.waiting_since && target ? responseClock(c.waiting_since, target, now) : null}
           />
         ))}
       </div>
@@ -215,11 +220,13 @@ function Row({
   isActive,
   onClick,
   onTagClick,
+  clock,
 }: {
   conversation: Conversation
   isActive: boolean
   onClick: () => void
   onTagClick: (tag: string) => void
+  clock: ResponseClock | null
 }) {
   const isWaiting = c.status === 'waiting'
 
@@ -254,10 +261,20 @@ function Row({
             {timeAgo(c.last_message_at)}
           </span>
         </div>
-        <p className="text-xs text-zinc-400 truncate">
-          {c.assigned_to_name
+        <p className="text-xs text-zinc-400 truncate flex items-center gap-1.5">
+          {clock && (
+            <span
+              className={`flex-shrink-0 text-[10px] font-semibold rounded px-1 py-px tabular-nums ${
+                clock.overdue ? 'bg-red-50 text-red-600' : clock.urgent ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500'
+              }`}
+              title="Time against your first-response target"
+            >
+              {clock.label}
+            </span>
+          )}
+          <span className="truncate">{c.assigned_to_name
             ? <span className="text-indigo-500 font-medium">{c.assigned_to_name}</span>
-            : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}
+            : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}</span>
         </p>
         {c.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">

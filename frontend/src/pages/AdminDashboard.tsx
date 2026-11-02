@@ -13,6 +13,7 @@ import {
   sendInviteEmail,
   updateAutoAssign,
   updateBusinessHours,
+  updateResponseTarget,
   updateMemberRole,
   updatePreChatForm,
   updateWidgetConfig,
@@ -228,7 +229,9 @@ function AnalyticsView() {
         <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Analytics</h2>
 
         {/* Stat tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className={`grid grid-cols-2 gap-3 ${
+          data.first_response_target_minutes === null ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-4'
+        }`}>
           <StatTile label="Total" value={data.total_conversations} />
           <StatTile label="Waiting" value={data.waiting_count} accent="amber" />
           <StatTile label="Open" value={data.open_count} accent="brand" />
@@ -237,6 +240,13 @@ function AnalyticsView() {
             label="Avg first reply"
             value={data.avg_first_response_minutes === null ? '—' : `${Math.round(data.avg_first_response_minutes)}m`}
           />
+          {data.first_response_target_minutes !== null && (
+            <StatTile
+              label={`Replied in ${data.first_response_target_minutes}m`}
+              value={data.first_response_within_target_pct === null ? '—' : `${Math.round(data.first_response_within_target_pct)}%`}
+              accent={data.first_response_within_target_pct !== null && data.first_response_within_target_pct < 80 ? 'amber' : 'emerald'}
+            />
+          )}
           <StatTile
             label="Avg CSAT"
             value={data.avg_csat === null ? '—' : `${data.avg_csat.toFixed(1)} / 5`}
@@ -456,6 +466,9 @@ function SettingsView({
 
         {/* Chat assignment */}
         <AutoAssignCard user={user} token={token} setAuth={setAuth} />
+
+        {/* First-response target */}
+        <ResponseTargetCard user={user} token={token} setAuth={setAuth} />
 
         {/* Team members */}
         <TeamMembersCard currentUserId={user?.id ?? ''} />
@@ -1015,6 +1028,91 @@ function AutoAssignCard({
         </button>
       </div>
       {error && <p className="text-xs text-red-500">Couldn't update auto-assignment. Please try again.</p>}
+    </div>
+  )
+}
+
+function ResponseTargetCard({
+  user,
+  token,
+  setAuth,
+}: {
+  user: User | null
+  token: string | null
+  setAuth: (token: string, user: User) => void
+}) {
+  const current = user?.organization.first_response_minutes ?? null
+  const [enabled, setEnabled] = useState(current !== null)
+  const [minutes, setMinutes] = useState(String(current ?? 5))
+  const [saved, setSaved] = useState(false)
+
+  const value = Number(minutes)
+  const valid = Number.isInteger(value) && value >= 1 && value <= 1440
+
+  const { mutate: save, isPending: saving, error } = useMutation({
+    mutationFn: () => updateResponseTarget(enabled ? value : null),
+    onSuccess: (updatedOrg) => {
+      if (token && user) setAuth(token, { ...user, organization: updatedOrg })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2_000)
+    },
+  })
+
+  return (
+    <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-zinc-900">First-response target</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Waiting chats count down to this in the inbox and turn red once it passes. The widget tells visitors
+            how soon to expect a reply, and analytics shows how often you made it.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Enable a first-response target"
+          onClick={() => setEnabled((v) => !v)}
+          className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors duration-200 ${
+            enabled ? 'bg-brand-500' : 'bg-zinc-200'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+              enabled ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      <label className={`text-xs font-medium text-zinc-700 flex items-center gap-2 ${enabled ? '' : 'opacity-50'}`}>
+        Reply within
+        <input
+          type="number"
+          min={1}
+          max={1440}
+          value={minutes}
+          disabled={!enabled}
+          onChange={(e) => setMinutes(e.target.value)}
+          className={`w-20 rounded-lg border px-2.5 py-1.5 text-sm font-normal outline-none focus:ring-2 focus:ring-brand-100 transition ${
+            valid ? 'border-zinc-200 focus:border-brand-500' : 'border-red-300'
+          }`}
+        />
+        minutes
+      </label>
+      {enabled && !valid && <p className="text-xs text-red-500 -mt-2">Pick between 1 and 1440 minutes.</p>}
+      {error && <p className="text-xs text-red-500">Couldn't save the target. Please try again.</p>}
+
+      <button
+        onClick={() => save()}
+        disabled={saving || (enabled && !valid)}
+        className={`self-start text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
+          saved ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
+        }`}
+      >
+        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
+      </button>
     </div>
   )
 }

@@ -66,6 +66,8 @@ class Organization(UUIDMixin, TimestampMixin, Base):
 
     # Hand each new chat to the next teammate with the dashboard open, in turn.
     auto_assign: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # How soon a waiting chat should get its first reply. None means no target.
+    first_response_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     conversations: Mapped[list[Conversation]] = relationship(

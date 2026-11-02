@@ -55,6 +55,7 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     assigned_to_id: uuid.UUID | None = None
     assigned_to_name: str | None = None
+    waiting_since: datetime | None = None
     tags: list[str] = []
     csat_rating: int | None = None
     pre_chat_answers: list[dict] = []
