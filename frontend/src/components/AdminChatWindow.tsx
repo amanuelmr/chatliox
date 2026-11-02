@@ -5,7 +5,7 @@ import { emailTranscript, getConversations, updateConversationStatus, updateConv
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
-import { confirmSent } from '@/lib/messages'
+import { addIncoming, confirmSent } from '@/lib/messages'
 import { listNames } from '@/lib/teammates'
 import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
@@ -83,9 +83,9 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
 
   const appendMsg = useCallback((msg: Message) => {
     queryClient.setQueryData<Message[]>(['messages', conversationId], (prev = []) =>
-      prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+      addIncoming(prev, msg, (m) => m.sender_id === user?.id)
     )
-  }, [queryClient, conversationId])
+  }, [queryClient, conversationId, user?.id])
 
   useEffect(() => {
     clearPresence()

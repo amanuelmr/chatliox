@@ -6,7 +6,7 @@ import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
-import { confirmSent } from './messages'
+import { addIncoming, confirmSent } from './messages'
 import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
 import type { Message } from '@/types/chat'
@@ -179,8 +179,17 @@ describe('visitor details', () => {
   })
 })
 
-describe('confirmSent', () => {
-  const msg = (id: string) => ({ id, content: id }) as Message
+describe('sent and incoming messages', () => {
+  const msg = (id: string, patch: Partial<Message> = {}) => ({ id, content: id, is_internal: false, ...patch }) as Message
+  const mine = (m: Message) => m.sender_id === 'me'
+
+  it("puts this window's own message in its placeholder's place", () => {
+    const list = [msg('a'), msg('opt-1', { content: 'Hi' })]
+    expect(addIncoming(list, msg('b', { content: 'Hi', sender_id: 'me' }), mine).map((m) => m.id)).toEqual(['a', 'b'])
+    // A teammate's message with the same words is a different message.
+    expect(addIncoming(list, msg('c', { content: 'Hi', sender_id: 'sam' }), mine).map((m) => m.id)).toEqual(['a', 'opt-1', 'c'])
+    expect(addIncoming([msg('a')], msg('a'), mine)).toHaveLength(1)
+  })
 
   it('swaps the placeholder for the saved message', () => {
     expect(confirmSent([msg('a'), msg('opt-1')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
