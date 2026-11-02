@@ -6,8 +6,10 @@ import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
+import { confirmSent } from './messages'
 import { describeBrowser, pageLabel, pagePath, siteName } from './visitor'
 import { apiWsUrl } from './ws'
+import type { Message } from '@/types/chat'
 
 function axiosError(status: number, data: unknown) {
   const config = { headers: new AxiosHeaders() }
@@ -174,5 +176,17 @@ describe('visitor details', () => {
     expect(pageLabel({ url: 'https://shop.test/boots', title: 'Boots', at: '' })).toBe('Boots')
     expect(siteName('https://www.search.test/?q=1')).toBe('search.test')
     expect(siteName('not a url')).toBe('not a url')
+  })
+})
+
+describe('confirmSent', () => {
+  const msg = (id: string) => ({ id, content: id }) as Message
+
+  it('swaps the placeholder for the saved message', () => {
+    expect(confirmSent([msg('a'), msg('opt-1')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
+  })
+
+  it('drops the placeholder when the saved message already arrived live', () => {
+    expect(confirmSent([msg('a'), msg('opt-1'), msg('b')], 'opt-1', msg('b')).map((m) => m.id)).toEqual(['a', 'b'])
   })
 })
