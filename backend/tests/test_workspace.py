@@ -96,4 +96,10 @@ async def test_analytics_summary(client: AsyncClient, admin: dict, start_chat):
     assert summary["avg_first_response_minutes"] >= 0
     assert (summary["avg_csat"], summary["csat_response_count"]) == (4, 1)
     assert sum(day["count"] for day in summary["volume_by_day"]) == 2
+    # Every day of the week is there, quiet ones included, ending today.
+    assert len(summary["volume_by_day"]) == 7
+    assert summary["csat_breakdown"] == [
+        {"rating": 5, "count": 0}, {"rating": 4, "count": 1}, {"rating": 3, "count": 0},
+        {"rating": 2, "count": 0}, {"rating": 1, "count": 0},
+    ]
     assert summary["per_agent"] == [{"agent_name": "Ada Admin", "resolved_count": 1}]
