@@ -43,12 +43,15 @@ async def create_message(
         conversation.last_message_at = now
         if sender_type == SenderType.ADMIN:
             conversation.status = ConversationStatus.OPEN
-            if sender_id is not None:
+            conversation.waiting_since = None
+            # Replying claims an unassigned chat; an assigned one is moved with a transfer.
+            if sender_id is not None and conversation.assigned_to_id is None:
                 conversation.assigned_to_id = sender_id
         elif sender_type == SenderType.VISITOR:
             # Visitor reply to a resolved conversation reopens it
             if conversation.status == ConversationStatus.CLOSED:
                 conversation.status = ConversationStatus.WAITING
+                conversation.waiting_since = now
             # New visitor activity restarts the "gone quiet" clock so a later
             # silence on this conversation can trigger another alert.
             conversation.waiting_alert_sent_at = None

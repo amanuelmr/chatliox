@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.message import Message, SenderType
 from app.models.organization import Organization
+from app.models.user import User
 
 
 async def create_conversation(
@@ -25,6 +26,7 @@ async def create_conversation(
         visitor_email=visitor_email,
         pre_chat_answers=pre_chat_answers or [],
         status=ConversationStatus.WAITING,
+        waiting_since=datetime.now(timezone.utc),
         organization_id=organization_id,
         assigned_to_id=assigned_to_id,
     )
@@ -101,6 +103,10 @@ async def update_conversation_status(
     conv = result.scalar_one_or_none()
     if conv is None:
         return None
+    if new_status == ConversationStatus.WAITING and conv.status != ConversationStatus.WAITING:
+        conv.waiting_since = datetime.now(timezone.utc)
+    elif new_status != ConversationStatus.WAITING:
+        conv.waiting_since = None
     conv.status = new_status
     await db.commit()
     await db.refresh(conv)
@@ -232,3 +238,31 @@ async def mark_waiting_alert_sent(db: AsyncSession, conversation_id: uuid.UUID) 
     if conv is not None:
         conv.waiting_alert_sent_at = datetime.now(timezone.utc)
         await db.commit()
+
+
+async def assign_conversation(
+    db: AsyncSession, conv: Conversation, by: User, assignee: User | None, note: str
+) -> Message:
+    """Hand the chat to a teammate (or nobody) and leave an internal note saying so."""
+    conv.assigned_to_id = assignee.id if assignee else None
+    if assignee is None:
+        content = "Unassigned this chat."
+    elif assignee.id == by.id:
+        content = "Took this chat."
+    else:
+        content = f"Assigned this chat to {assignee.full_name}."
+    if note:
+        content += f"\n\n{note}"
+    message = Message(
+        conversation_id=conv.id,
+        sender_type=SenderType.ADMIN,
+        sender_id=by.id,
+        content=content,
+        is_read=True,
+        is_internal=True,
+    )
+    db.add(message)
+    await db.commit()
+    await db.refresh(message)
+    message.sender = by
+    return message

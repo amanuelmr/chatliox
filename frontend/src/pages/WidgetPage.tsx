@@ -19,6 +19,7 @@ import { getVisitorMessages, sendMessage, uploadAttachment } from '@/api/message
 import { getWidgetConfig } from '@/api/organizations'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { apiErrorMessage } from '@/lib/apiError'
+import { formatMinutes } from '@/lib/responseTime'
 import { apiWsUrl } from '@/lib/ws'
 import Spinner from '@/components/Spinner'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
@@ -164,7 +165,13 @@ export default function WidgetPage() {
       }
       aria-hidden={!isEmbedded && !isOpen}
     >
-      <PanelHeader onClose={handleClose} adminName={adminName} brandColor={brandColor} isOnline={isOnline} />
+      <PanelHeader
+        onClose={handleClose}
+        adminName={adminName}
+        brandColor={brandColor}
+        isOnline={isOnline}
+        replyWithinMinutes={widgetConfig?.first_response_minutes ?? null}
+      />
       {conversationId ? (
         <ChatView
           conversationId={conversationId}
@@ -229,12 +236,18 @@ function PanelHeader({
   adminName,
   brandColor,
   isOnline,
+  replyWithinMinutes,
 }: {
   onClose: () => void
   adminName: string | null
   brandColor: string
   isOnline: boolean
+  // The team's first-response target, shown as the expected reply time.
+  replyWithinMinutes: number | null
 }) {
+  const replyTime = replyWithinMinutes === null
+    ? 'We typically reply in a few minutes'
+    : `Usually replies within ${formatMinutes(replyWithinMinutes)}`
   return (
     <div style={{ backgroundColor: brandColor }} className="px-5 py-4 flex items-center justify-between flex-shrink-0">
       <div className="flex items-center gap-3">
@@ -247,7 +260,7 @@ function PanelHeader({
           <p className="text-white font-semibold text-sm leading-tight tracking-tight">{adminName ?? 'Support'}</p>
           <p className="text-white/50 text-xs mt-0.5 flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-white/40'}`} />
-            {!isOnline ? "Away · we'll reply by email" : adminName ? 'Here to help you' : 'We typically reply in a few minutes'}
+            {!isOnline ? "Away · we'll reply by email" : adminName ? 'Here to help you' : replyTime}
           </p>
         </div>
       </div>

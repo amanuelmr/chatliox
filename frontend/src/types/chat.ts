@@ -9,7 +9,10 @@ export interface Conversation {
   status: ConversationStatus
   last_message_at: string | null
   created_at: string
+  assigned_to_id: string | null
   assigned_to_name: string | null
+  // When it started waiting for an agent; null once someone has replied.
+  waiting_since: string | null
   tags: string[]
   csat_rating: number | null
   // Answers to the org's custom pre-chat questions, as they were asked.

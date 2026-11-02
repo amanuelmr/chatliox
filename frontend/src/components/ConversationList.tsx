@@ -1,9 +1,36 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getConversations } from '@/api/conversations'
+import { useNow } from '@/hooks/useNow'
+import { responseClock, type ResponseClock } from '@/lib/responseTime'
+import { useAuthStore } from '@/store/authStore'
 import type { Conversation, ConversationStatus } from '@/types/chat'
 
 type Filter = 'all' | ConversationStatus
+type View = 'all' | 'mine' | 'unassigned'
+
+const VIEWS: { key: View; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'mine', label: 'Mine' },
+  { key: 'unassigned', label: 'Unassigned' },
+]
+
+const VIEW_STORAGE_KEY = 'inbox-view'
+
+function savedView(): View {
+  try {
+    const v = localStorage.getItem(VIEW_STORAGE_KEY)
+    return v === 'mine' || v === 'unassigned' ? v : 'all'
+  } catch {
+    return 'all'
+  }
+}
+
+function inView(c: Conversation, view: View, userId: string | undefined): boolean {
+  if (view === 'mine') return c.assigned_to_id === userId
+  if (view === 'unassigned') return c.assigned_to_id === null
+  return true
+}
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -46,6 +73,15 @@ interface Props {
 
 export default function ConversationList({ activeId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [view, setViewState] = useState<View>(savedView)
+  const user = useAuthStore((s) => s.user)
+  const target = user?.organization.first_response_minutes ?? null
+  const now = useNow()
+
+  const setView = (v: View) => {
+    setViewState(v)
+    try { localStorage.setItem(VIEW_STORAGE_KEY, v) } catch { /* private mode */ }
+  }
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const trimmedSearch = search.trim()
@@ -68,10 +104,13 @@ export default function ConversationList({ activeId, onSelect }: Props) {
   })
 
   const base = trimmedSearch ? (searchResults ?? []) : conversations
-  const byStatus = filter === 'all' ? base : base.filter((c) => c.status === filter)
+  const byView = base.filter((c) => inView(c, view, user?.id))
+  const byStatus = filter === 'all' ? byView : byView.filter((c) => c.status === filter)
   const filtered = activeTag ? byStatus.filter((c) => c.tags.includes(activeTag)) : byStatus
 
-  const waitingCount = conversations.filter((c) => c.status === 'waiting').length
+  const waitingCount = conversations.filter((c) => c.status === 'waiting' && inView(c, view, user?.id)).length
+  // Chats still needing attention in each view; resolved ones don't count.
+  const viewCount = (v: View) => conversations.filter((c) => c.status !== 'closed' && inView(c, v, user?.id)).length
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -98,6 +137,29 @@ export default function ConversationList({ activeId, onSelect }: Props) {
             #{activeTag} ×
           </button>
         )}
+      </div>
+
+      {/* Views */}
+      <div className="px-3 pb-2 flex-shrink-0 flex gap-1" role="tablist" aria-label="Inbox view">
+        {VIEWS.map(({ key, label }) => {
+          const count = key === 'all' ? null : viewCount(key)
+          return (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors duration-150 ${
+                view === key ? 'bg-zinc-900 text-white font-semibold' : 'text-zinc-500 hover:bg-zinc-100 font-medium'
+              }`}
+            >
+              {label}
+              {count !== null && count > 0 && (
+                <span className={`ml-1 tabular-nums ${view === key ? 'text-white/70' : 'text-zinc-400'}`}>{count}</span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* macOS-style segmented control */}
@@ -133,7 +195,9 @@ export default function ConversationList({ activeId, onSelect }: Props) {
         )}
 
         {!isLoading && !searching && filtered.length === 0 && (
-          <p className="text-xs text-zinc-400 text-center py-12">No conversations yet.</p>
+          <p className="text-xs text-zinc-400 text-center py-12">
+            {view === 'mine' ? 'Nothing assigned to you.' : view === 'unassigned' ? 'Every chat has an owner.' : 'No conversations yet.'}
+          </p>
         )}
 
         {filtered.map((c) => (
@@ -143,6 +207,7 @@ export default function ConversationList({ activeId, onSelect }: Props) {
             isActive={c.id === activeId}
             onClick={() => onSelect(c.id)}
             onTagClick={setActiveTag}
+            clock={c.status === 'waiting' && c.waiting_since && target ? responseClock(c.waiting_since, target, now) : null}
           />
         ))}
       </div>
@@ -155,11 +220,13 @@ function Row({
   isActive,
   onClick,
   onTagClick,
+  clock,
 }: {
   conversation: Conversation
   isActive: boolean
   onClick: () => void
   onTagClick: (tag: string) => void
+  clock: ResponseClock | null
 }) {
   const isWaiting = c.status === 'waiting'
 
@@ -194,10 +261,20 @@ function Row({
             {timeAgo(c.last_message_at)}
           </span>
         </div>
-        <p className="text-xs text-zinc-400 truncate">
-          {c.assigned_to_name
+        <p className="text-xs text-zinc-400 truncate flex items-center gap-1.5">
+          {clock && (
+            <span
+              className={`flex-shrink-0 text-[10px] font-semibold rounded px-1 py-px tabular-nums ${
+                clock.overdue ? 'bg-red-50 text-red-600' : clock.urgent ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500'
+              }`}
+              title="Time against your first-response target"
+            >
+              {clock.label}
+            </span>
+          )}
+          <span className="truncate">{c.assigned_to_name
             ? <span className="text-indigo-500 font-medium">{c.assigned_to_name}</span>
-            : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}
+            : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}</span>
         </p>
         {c.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">

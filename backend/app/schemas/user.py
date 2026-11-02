@@ -28,6 +28,7 @@ class OrganizationInfo(BaseModel):
     pre_chat_email: str
     pre_chat_fields: list[dict]
     auto_assign: bool
+    first_response_minutes: int | None
 
 
 class UserResponse(BaseModel):
@@ -41,6 +42,13 @@ class UserResponse(BaseModel):
     role: UserRole
     created_at: datetime
     organization: OrganizationInfo
+
+
+class TeammateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
 
 
 class MemberResponse(BaseModel):

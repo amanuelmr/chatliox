@@ -46,6 +46,8 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
 
     # Set once an "unanswered too long" email alert has fired, so the sweep
     # doesn't re-notify the team every poll cycle for the same silence.
+    # When the chat last started waiting for an agent; None once someone has replied.
+    waiting_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     waiting_alert_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

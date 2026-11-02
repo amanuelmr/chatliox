@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.message import Message, SenderType
+from app.models.organization import Organization
 from app.models.user import User
 
 
@@ -39,6 +40,15 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
         if first_at is not None
     ]
     avg_first_response_minutes = sum(diffs_minutes) / len(diffs_minutes) if diffs_minutes else None
+
+    target = await db.scalar(
+        select(Organization.first_response_minutes).where(Organization.id == organization_id)
+    )
+    within_target_pct = (
+        100 * sum(d <= target for d in diffs_minutes) / len(diffs_minutes)
+        if target is not None and diffs_minutes
+        else None
+    )
 
     csat_rows = await db.execute(
         select(Conversation.csat_rating)
@@ -77,6 +87,8 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
         "open_count": status_counts.get("open", 0),
         "closed_count": status_counts.get("closed", 0),
         "avg_first_response_minutes": avg_first_response_minutes,
+        "first_response_target_minutes": target,
+        "first_response_within_target_pct": within_target_pct,
         "avg_csat": avg_csat,
         "csat_response_count": len(csat_ratings),
         "volume_by_day": volume_by_day,

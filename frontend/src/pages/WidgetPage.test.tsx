@@ -54,6 +54,7 @@ const config = (patch: Partial<WidgetConfig> = {}): WidgetConfig => ({
   pre_chat_name: 'optional',
   pre_chat_email: 'optional',
   pre_chat_fields: [],
+  first_response_minutes: null,
   is_online: true,
   ...patch,
 })
@@ -124,6 +125,19 @@ describe('widget pre-chat form', () => {
     await userEvent.clear(screen.getByPlaceholderText('Your email'))
     await userEvent.type(screen.getByPlaceholderText('Your email'), 'vi@example.com')
     expect(sendButton()).toBeEnabled()
+  })
+})
+
+describe('widget expected reply time', () => {
+  it('shows the team target while online, and not while away', async () => {
+    await openWidget(config({ first_response_minutes: 15 }))
+    expect(await screen.findByText('Usually replies within 15 minutes')).toBeInTheDocument()
+  })
+
+  it('is left out while the team is away', async () => {
+    await openWidget(config({ first_response_minutes: 15, is_online: false }))
+    await screen.findByText("We're away")
+    expect(screen.queryByText(/Usually replies/)).not.toBeInTheDocument()
   })
 })
 

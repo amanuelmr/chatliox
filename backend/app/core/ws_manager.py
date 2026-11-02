@@ -76,7 +76,10 @@ class ConnectionManager:
 
     async def broadcast_viewers(self, conversation_id: str) -> None:
         """Tell every agent on the conversation who else has it open. Visitors aren't told."""
-        event = {"type": "viewers", "agents": self.viewers(conversation_id)}
+        await self.broadcast_to_agents(conversation_id, {"type": "viewers", "agents": self.viewers(conversation_id)})
+
+    async def broadcast_to_agents(self, conversation_id: str, event: dict) -> None:
+        """Send to the agents with the conversation open, never to the visitor."""
         for _, sockets in list(self._viewers.get(conversation_id, {}).values()):
             for ws in sockets.copy():
                 try:
