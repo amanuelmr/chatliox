@@ -1,15 +1,18 @@
 import { useState } from 'react'
+import { hiddenReason } from '@/lib/engage'
 import { useAuthStore } from '@/store/authStore'
+import DisplayEditor, { useDisplayDraft, type PageTest } from './DisplayEditor'
 import { SaveBar } from './EditorParts'
 import ProactiveEditor, { proactiveProblem, useProactiveDraft } from './ProactiveEditor'
 import WelcomeEditor, { useWelcomeDraft } from './WelcomeEditor'
 import WidgetPreview, { type PreviewState } from './WidgetPreview'
 
-type Tab = 'welcome' | 'proactive'
+type Tab = 'welcome' | 'proactive' | 'display'
 
 const TABS: { id: Tab; label: string; preview: PreviewState }[] = [
   { id: 'welcome', label: 'Welcome', preview: 'open' },
   { id: 'proactive', label: 'Proactive messages', preview: 'closed' },
+  { id: 'display', label: 'Where it shows', preview: 'closed' },
 ]
 
 // Everything visitors see from the widget before they ask a question, with a
@@ -21,9 +24,13 @@ export default function EngageView() {
   const [selectedProactive, setSelectedProactive] = useState(0)
   const welcome = useWelcomeDraft()
   const proactive = useProactiveDraft()
+  const display = useDisplayDraft()
+  const site = `https://${(org?.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')}.com/`
+  const [pageTest, setPageTest] = useState<PageTest>({ url: site, mobile: false })
 
   if (!org) return null
-  const active = tab === 'welcome' ? welcome : proactive
+  const drafts = { welcome, proactive, display }
+  const active = drafts[tab]
   const problem = tab === 'proactive' ? proactiveProblem(proactive.draft) : null
 
   const shown = proactive.draft[selectedProactive]
@@ -31,6 +38,8 @@ export default function EngageView() {
   // Opening the chat from a proactive message adds it to the greeting.
   const greeting = tab === 'proactive' && shown?.message.trim() ? [...welcomeMessages, shown.message] : welcomeMessages
   const pagePath = tab === 'proactive' && shown?.page_contains ? shown.page_contains.replace(/^\/?/, '') : ''
+  const pageUrl = tab === 'display' ? pageTest.url : `${site}${pagePath}`
+  const hidden = tab === 'display' ? hiddenReason(display.draft, pageTest.url, pageTest.mobile) : null
 
   const switchTab = (next: (typeof TABS)[number]) => {
     setTab(next.id)
@@ -59,7 +68,7 @@ export default function EngageView() {
             >
               {t.label}
               {/* Unsaved edits on a tab you've left are easy to forget. */}
-              {(t.id === 'welcome' ? welcome : proactive).dirty && (
+              {drafts[t.id].dirty && (
                 <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-amber-500 align-middle" aria-label="unsaved" />
               )}
             </button>
@@ -70,8 +79,10 @@ export default function EngageView() {
           <div className="bg-white rounded-xl ring-1 ring-zinc-200 px-6 pt-6" role="tabpanel">
             {tab === 'welcome' ? (
               <WelcomeEditor state={welcome} />
-            ) : (
+            ) : tab === 'proactive' ? (
               <ProactiveEditor state={proactive} selected={selectedProactive} onSelect={setSelectedProactive} />
+            ) : (
+              <DisplayEditor state={display} test={pageTest} onTest={setPageTest} />
             )}
             <SaveBar
               dirty={active.dirty}
@@ -113,8 +124,12 @@ export default function EngageView() {
               quickReplies={welcome.draft.quick_replies}
               state={previewState}
               teaser={tab === 'proactive' && shown?.enabled ? shown.message.trim() || null : null}
-              pageUrl={`https://${org.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.com/${pagePath}`}
+              pageUrl={pageUrl}
+              hiddenReason={hidden}
             />
+            {tab === 'display' && hidden === null && (
+              <p className="text-xs text-emerald-700">The widget loads on this page.</p>
+            )}
             {tab === 'proactive' && shown && !shown.enabled && (
               <p className="text-xs text-zinc-500">This message is switched off, so visitors won't see it.</p>
             )}

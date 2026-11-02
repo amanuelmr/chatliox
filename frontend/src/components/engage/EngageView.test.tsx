@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getProactiveStats, updateProactiveMessages, updateWelcome } from '@/api/organizations'
+import { getProactiveStats, updateDisplayRules, updateProactiveMessages, updateWelcome } from '@/api/organizations'
 import { useAuthStore } from '@/store/authStore'
 import { renderAt } from '@/test/render'
 import type { Organization, User } from '@/types/auth'
@@ -120,5 +120,45 @@ describe('engage: proactive messages', () => {
       saved,
       { message: 'Welcome back!', page_contains: '', delay_seconds: 10, min_visits: 1, frequency: 'every_visit', enabled: true },
     ])
+  })
+})
+
+describe('engage: where it shows', () => {
+  beforeEach(() => {
+    vi.mocked(updateDisplayRules).mockReset()
+    signIn()
+  })
+
+  it('checks a page against the rules being edited, then saves them', async () => {
+    renderAt(<EngageView />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Where it shows' }))
+    expect(screen.getByText('The widget loads on this page.')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Allowed sites' }), 'https://www.BootShop.com/home{Enter}')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Pages to hide on' }), '/checkout{Enter}')
+    await userEvent.click(screen.getByRole('radio', { name: 'Desktop only' }))
+    expect(screen.getByRole('list', { name: 'Allowed sites' })).toHaveTextContent('bootshop.com')
+
+    const tryPage = screen.getByRole('textbox', { name: 'Page address to try' })
+    await userEvent.clear(tryPage)
+    await userEvent.type(tryPage, 'https://bootshop.com/checkout/pay')
+    expect(preview().getByText("It's hidden on pages containing /checkout.")).toBeInTheDocument()
+
+    await userEvent.clear(tryPage)
+    await userEvent.type(tryPage, 'https://copycat.com/')
+    expect(preview().getByText("copycat.com isn't one of your allowed sites.")).toBeInTheDocument()
+
+    await userEvent.clear(tryPage)
+    await userEvent.type(tryPage, 'https://help.bootshop.com/')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'On a phone' }))
+    expect(preview().getByText('It only shows on desktop.')).toBeInTheDocument()
+
+    vi.mocked(updateDisplayRules).mockResolvedValue(ORG)
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(updateDisplayRules).toHaveBeenCalledWith({
+      widget_devices: 'desktop',
+      widget_hidden_paths: ['/checkout'],
+      widget_allowed_domains: ['bootshop.com'],
+    })
   })
 })

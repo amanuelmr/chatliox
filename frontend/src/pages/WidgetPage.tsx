@@ -24,6 +24,7 @@ import { apiWsUrl } from '@/lib/ws'
 import { LOADER_MSG_SOURCE, WIDGET_MSG_SOURCE } from '@/lib/embed'
 import { useVisitorTracking } from '@/hooks/useVisitorTracking'
 import { useHostPage, useProactiveMessage } from '@/hooks/useProactiveMessage'
+import { hiddenReason, isMobileDevice, onAllowedSite } from '@/lib/engage'
 import Spinner from '@/components/Spinner'
 import { QuickReplies, TeamBubbles } from '@/components/widget/WelcomeThread'
 import type { ConversationStatus, Message, WsEvent } from '@/types/chat'
@@ -83,8 +84,6 @@ export default function WidgetPage() {
   const [adminName, setAdminName] = useState<string | null>(null)
   const [convStatus, setConvStatus] = useState<ConversationStatus | null>(null)
 
-  useVisitorTracking(widgetKey, visitorId, isEmbedded)
-
   const { data: widgetConfig } = useQuery({
     queryKey: ['widget-config', widgetKey],
     queryFn: () => getWidgetConfig(widgetKey),
@@ -98,13 +97,22 @@ export default function WidgetPage() {
   const awayMessage = widgetConfig?.away_message ?? ''
   const teamName = widgetConfig?.name ?? 'Support'
 
-  // Invitations only go to visitors who haven't started a chat, while the team is in.
+  // The team's display rules decide whether the widget appears on this page at all.
   const hostPage = useHostPage(isEmbedded)
+  const hiddenHere = widgetConfig && hostPage ? hiddenReason(widgetConfig, hostPage.url, isMobileDevice(navigator.userAgent)) : null
+  useEffect(() => {
+    if (isEmbedded && widgetConfig && hostPage) postToParent({ type: 'display', visible: hiddenHere === null })
+  }, [isEmbedded, widgetConfig, hostPage, hiddenHere])
+
+  // Someone else's site using this widget key isn't the team's traffic.
+  useVisitorTracking(widgetKey, visitorId, isEmbedded && !(widgetConfig && hostPage && !onAllowedSite(widgetConfig, hostPage.url)))
+
+  // Invitations only go to visitors who haven't started a chat, while the team is in.
   const { proactive, dismiss: dismissProactive } = useProactiveMessage(
     widgetKey,
     widgetConfig?.proactive_messages ?? [],
     hostPage,
-    isEmbedded && !conversationId && !embeddedOpen && isOnline,
+    isEmbedded && !conversationId && !embeddedOpen && isOnline && hiddenHere === null,
   )
 
   // The proactive message reads as the team's last greeting, before and after the chat starts.

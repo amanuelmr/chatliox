@@ -3,7 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
 import { describeActions, matchMacros, parseTags, slashQuery } from './macros'
-import { NEW_PROACTIVE, describeTrigger, dueProactive, recordVisit, type VisitHistory } from './engage'
+import {
+  NEW_PROACTIVE,
+  describeTrigger,
+  dueProactive,
+  hiddenReason,
+  isMobileDevice,
+  normalizeDomain,
+  recordVisit,
+  type DisplayRules,
+  type VisitHistory,
+} from './engage'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
 import { formatMinutes, responseClock } from './responseTime'
 import { listNames } from './teammates'
@@ -213,5 +223,38 @@ describe('proactive messages', () => {
     )
     expect(describeTrigger(msg({ delay_seconds: 0, frequency: 'every_visit' }))).toBe('On any page, right away. Once every visit.')
     expect(describeTrigger(msg({ delay_seconds: 1, min_visits: 3 }))).toBe('On any page, after 1 second, from the 3rd visit. Once per visitor.')
+  })
+})
+
+describe('widget display rules', () => {
+  const rules = (patch: Partial<DisplayRules> = {}): DisplayRules => ({
+    widget_devices: 'all', widget_hidden_paths: [], widget_allowed_domains: [], ...patch,
+  })
+
+  it('tidies pasted sites the way the server does', () => {
+    expect(normalizeDomain(' https://www.Shop.com/pricing ')).toBe('shop.com')
+    expect(normalizeDomain('*.blog.shop.com')).toBe('blog.shop.com')
+    expect(normalizeDomain('localhost:5176')).toBe('localhost:5176')
+  })
+
+  it('loads only on allowed sites and their subdomains', () => {
+    const r = rules({ widget_allowed_domains: ['shop.com'] })
+    expect(hiddenReason(r, 'https://shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://www.shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://help.shop.com/', false)).toBeNull()
+    expect(hiddenReason(r, 'https://notshop.com/', false)).toBe("notshop.com isn't one of your allowed sites.")
+  })
+
+  it('follows the device setting and the hidden pages', () => {
+    expect(hiddenReason(rules({ widget_devices: 'desktop' }), 'https://shop.com/', true)).toBe('It only shows on desktop.')
+    expect(hiddenReason(rules({ widget_devices: 'mobile' }), 'https://shop.com/', false)).toBe('It only shows on mobile.')
+    const r = rules({ widget_hidden_paths: ['/Checkout'] })
+    expect(hiddenReason(r, 'https://shop.com/checkout/pay', false)).toBe("It's hidden on pages containing /Checkout.")
+    expect(hiddenReason(r, 'https://shop.com/cart', false)).toBeNull()
+  })
+
+  it('spots phones and tablets', () => {
+    expect(isMobileDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) Mobile/15E148')).toBe(true)
+    expect(isMobileDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0.0.0')).toBe(false)
   })
 })

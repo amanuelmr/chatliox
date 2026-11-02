@@ -1,4 +1,4 @@
-import type { ProactiveMessage } from '@/types/auth'
+import type { Organization, ProactiveMessage } from '@/types/auth'
 
 // What the widget remembers about a visitor between page loads, to decide
 // which proactive messages are due. Kept in the widget's own storage.
@@ -56,4 +56,48 @@ export const NEW_PROACTIVE: ProactiveMessage = {
   min_visits: 1,
   frequency: 'once',
   enabled: true,
+}
+
+export type DisplayRules = Pick<Organization, 'widget_devices' | 'widget_hidden_paths' | 'widget_allowed_domains'>
+
+// Same tidying the server does: "https://www.Shop.com/pricing" is "shop.com".
+export function normalizeDomain(value: string): string {
+  return value.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split('/')[0].replace(/^\*\./, '').replace(/^www\./, '')
+}
+
+// A site's own subdomains count as the site.
+export function matchesDomain(host: string, domain: string): boolean {
+  const site = normalizeDomain(host)
+  return site === domain || site.endsWith(`.${domain}`)
+}
+
+export function isMobileDevice(userAgent: string): boolean {
+  return /Mobi|Android|iPhone|iPad|iPod/.test(userAgent)
+}
+
+export function onAllowedSite(rules: DisplayRules, url: string): boolean {
+  const domains = rules.widget_allowed_domains ?? []
+  if (domains.length === 0) return true
+  try {
+    const host = new URL(url).host
+    return domains.some((d) => matchesDomain(host, d))
+  } catch {
+    return true
+  }
+}
+
+// Why the widget shouldn't load on this page, in the team's terms, or null when it should.
+export function hiddenReason(rules: DisplayRules, url: string, mobile: boolean): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (!onAllowedSite(rules, url)) return `${normalizeDomain(parsed.host)} isn't one of your allowed sites.`
+  if (rules.widget_devices === 'desktop' && mobile) return 'It only shows on desktop.'
+  if (rules.widget_devices === 'mobile' && !mobile) return 'It only shows on mobile.'
+  const address = `${parsed.pathname}${parsed.search}${parsed.hash}`.toLowerCase()
+  const hiddenOn = (rules.widget_hidden_paths ?? []).find((p) => address.includes(p.toLowerCase()))
+  return hiddenOn ? `It's hidden on pages containing ${hiddenOn}.` : null
 }

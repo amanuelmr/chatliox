@@ -280,3 +280,23 @@ describe('widget proactive message', () => {
     posted.mockRestore()
   })
 })
+
+describe('widget display rules', () => {
+  const fromLoader = (data: Record<string, unknown>) =>
+    act(() => { window.dispatchEvent(new MessageEvent('message', { data: { source: 'chatliox-loader', ...data }, source: window })) })
+  const displayed = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.map(([data]) => data as { type?: string; visible?: boolean }).filter((d) => d.type === 'display').map((d) => d.visible)
+
+  it('tells the loader whether to show the launcher on each page', async () => {
+    const posted = vi.spyOn(window, 'postMessage')
+    vi.mocked(getWidgetConfig).mockResolvedValue(config({ widget_hidden_paths: ['/checkout'] }))
+    renderAt(<WidgetPage />, `/widget?key=${KEY}&embed=1`)
+    await vi.waitFor(() => expect(getWidgetConfig).toHaveBeenCalled())
+
+    await fromLoader({ type: 'page', url: 'https://shop.test/checkout', title: 'Checkout' })
+    await vi.waitFor(() => expect(displayed(posted)).toEqual([false]))
+    await fromLoader({ type: 'page', url: 'https://shop.test/boots', title: 'Boots' })
+    await vi.waitFor(() => expect(displayed(posted)).toEqual([false, true]))
+    posted.mockRestore()
+  })
+})

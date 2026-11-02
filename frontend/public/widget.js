@@ -98,6 +98,8 @@
     'justify-content:center',
     'padding:0',
     'transition:transform 150ms ease,background 150ms ease',
+    // Shown once the widget confirms the team's display rules allow this page.
+    'visibility:hidden',
   ].join(';')
   bubble.addEventListener('mouseenter', function () { bubble.style.transform = 'scale(1.06)' })
   bubble.addEventListener('mouseleave', function () { bubble.style.transform = 'scale(1)' })
@@ -231,7 +233,7 @@
   applyLayout()
 
   function showTeaser(data) {
-    if (isOpen || typeof data.text !== 'string') return
+    if (isOpen || typeof data.text !== 'string' || bubble.style.visibility === 'hidden') return
     var name = typeof data.name === 'string' ? data.name : ''
     teaserName.textContent = name
     teaserAvatar.textContent = name ? name.charAt(0).toUpperCase() : ''
@@ -311,6 +313,17 @@
   window.addEventListener('hashchange', reportPage)
   setInterval(reportPage, 1000)
 
+  // The team can hide the widget by page, device or site. Until the widget has
+  // checked, the launcher stays hidden; if it never reports, show it anyway.
+  function setDisplayed(visible) {
+    bubble.style.visibility = visible ? 'visible' : 'hidden'
+    if (!visible) {
+      if (isOpen) setOpen(false)
+      hideTeaser()
+    }
+  }
+  var displayFallback = setTimeout(function () { setDisplayed(true) }, 4000)
+
   window.addEventListener('message', function (event) {
     if (event.origin !== FRONTEND_ORIGIN) return
     var data = event.data
@@ -332,6 +345,9 @@
       applyLayout()
       widgetReady = true
       reportPage()
+    } else if (data.type === 'display') {
+      clearTimeout(displayFallback)
+      setDisplayed(data.visible !== false)
     } else if (data.type === 'teaser') {
       showTeaser(data)
     } else if (data.type === 'close') {
