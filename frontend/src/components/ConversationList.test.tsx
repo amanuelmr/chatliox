@@ -19,6 +19,8 @@ const chat = (id: string, patch: Partial<Conversation>): Conversation => ({
   visitor_email: null,
   status: 'open',
   last_message_at: minutesAgo(1),
+  last_message_preview: null,
+  last_message_sender: null,
   created_at: minutesAgo(1),
   assigned_to_id: null,
   assigned_to_name: null,
@@ -98,5 +100,21 @@ describe('first-response clock', () => {
     signIn(null)
     await showList([chat('Fresh', { status: 'waiting', waiting_since: minutesAgo(3) })])
     expect(screen.queryByTitle('Time against your first-response target')).not.toBeInTheDocument()
+  })
+})
+
+describe('inbox rows', () => {
+  it("show each chat's latest message, marking the team's replies", async () => {
+    signIn()
+    vi.mocked(getConversations).mockResolvedValue([
+      chat('Bea', { status: 'waiting', last_message_preview: 'My card was charged twice', last_message_sender: 'visitor' }),
+      chat('Fiona', { last_message_preview: 'The replacement ships tomorrow', last_message_sender: 'admin' }),
+      chat('Tom', { visitor_email: 'tom@example.com' }),
+    ])
+    renderAt(<ConversationList onSelect={vi.fn()} />)
+    expect(await screen.findByText('My card was charged twice')).toBeInTheDocument()
+    expect(screen.getByText('The replacement ships tomorrow').parentElement).toHaveTextContent('Reply: The replacement ships tomorrow')
+    // Before any message, the row falls back to the visitor's email.
+    expect(screen.getByText('tom@example.com')).toBeInTheDocument()
   })
 })

@@ -54,6 +54,8 @@ class ConversationResponse(BaseModel):
     visitor_email: str | None
     status: ConversationStatus
     last_message_at: datetime | None
+    last_message_preview: str | None = None
+    last_message_sender: str | None = None
     created_at: datetime
     assigned_to_id: uuid.UUID | None = None
     assigned_to_name: str | None = None

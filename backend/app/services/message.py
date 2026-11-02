@@ -41,6 +41,9 @@ async def create_message(
     # Internal notes don't affect conversation status or last_message_at
     if not is_internal:
         conversation.last_message_at = now
+        preview = " ".join(content.split()) or f"Sent a file: {attachment_name or ''}".strip()
+        conversation.last_message_preview = preview[:200]
+        conversation.last_message_sender = sender_type.value
         if sender_type == SenderType.ADMIN:
             conversation.status = ConversationStatus.OPEN
             conversation.waiting_since = None

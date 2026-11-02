@@ -43,6 +43,10 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     last_message_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # The latest message the visitor can see, shortened, and who sent it
+    # ("visitor" or "admin"), so the inbox can show it without loading messages.
+    last_message_preview: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    last_message_sender: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     # Set once an "unanswered too long" email alert has fired, so the sweep
     # doesn't re-notify the team every poll cycle for the same silence.

@@ -261,7 +261,11 @@ function Row({
             {timeAgo(c.last_message_at)}
           </span>
         </div>
-        <p className="text-xs text-zinc-400 truncate flex items-center gap-1.5">
+        <p className={`text-xs truncate ${isWaiting ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          {c.last_message_sender === 'admin' && <span className="text-zinc-400">Reply: </span>}
+          {c.last_message_preview ?? c.visitor_email ?? 'No messages yet'}
+        </p>
+        <p className="text-xs text-zinc-400 truncate flex items-center gap-1.5 mt-0.5 empty:hidden">
           {clock && (
             <span
               className={`flex-shrink-0 text-[10px] font-semibold rounded px-1 py-px tabular-nums ${
@@ -272,9 +276,7 @@ function Row({
               {clock.label}
             </span>
           )}
-          <span className="truncate">{c.assigned_to_name
-            ? <span className="text-indigo-500 font-medium">{c.assigned_to_name}</span>
-            : c.visitor_email ?? (c.status === 'closed' ? 'Resolved' : 'No reply yet')}</span>
+          {c.assigned_to_name && <span className="truncate text-indigo-500 font-medium">{c.assigned_to_name}</span>}
         </p>
         {c.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
