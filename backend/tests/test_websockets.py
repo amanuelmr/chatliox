@@ -1,12 +1,15 @@
 """Live updates over WebSockets. These use Starlette's synchronous TestClient,
 which drives the app on its own event loop."""
+import asyncio
 import time
 import uuid
 
+import asyncpg
 import pytest
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.core.config import settings
 from app.core.ws_manager import manager
 from app.main import app
 from tests.conftest import token_from
@@ -253,3 +256,38 @@ def test_agents_see_what_the_visitor_is_typing_unless_turned_off(http: TestClien
             visitor.send_json({"type": "typing", "is_typing": True, "draft": "secret"})
             event = agent.receive_json()
             assert (event["type"], event["is_typing"], "draft" in event) == ("typing", True, False)
+
+
+def _idle_in_transaction() -> int:
+    async def count() -> int:
+        conn = await asyncpg.connect(settings.DATABASE_URL.replace("+asyncpg", ""))
+        try:
+            return await conn.fetchval(
+                "SELECT count(*) FROM pg_stat_activity"
+                " WHERE datname = current_database() AND state = 'idle in transaction'"
+            )
+        finally:
+            await conn.close()
+
+    return asyncio.run(count())
+
+
+def test_open_sockets_do_not_hold_a_database_connection(http: TestClient, setup: dict):
+    """Sockets stay open for as long as someone is on the site, so they must not
+    keep a transaction (and a pooled connection) open the whole time."""
+    conv, token, visitor_id = setup["conv_id"], setup["token"], setup["visitor_id"]
+    before = _open()
+    with http.websocket_connect(f"/ws/dashboard?token={token}") as dashboard, \
+            http.websocket_connect(f"/ws/conversations/{conv}?token={token}"), \
+            http.websocket_connect(f"/ws/conversations/{conv}?visitor_id={visitor_id}"), \
+            http.websocket_connect(f"/ws/visitors?widget_key={setup['widget_key']}&visitor_id={visitor_id}") as site:
+        _joined(before + 3)
+        site.send_json({"type": "page", "url": "https://shop.test/", "title": "Shop", "referrer": ""})
+        event = dashboard.receive_json()
+        while event["type"] != "conversation_updated":
+            event = dashboard.receive_json()
+
+        deadline = time.monotonic() + 2
+        while _idle_in_transaction():
+            assert time.monotonic() < deadline, "a socket is holding a transaction open"
+            time.sleep(0.05)
