@@ -22,6 +22,8 @@ import {
   updateWidgetConfig,
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
+import { getConversations } from '@/api/conversations'
+import { useNow } from '@/hooks/useNow'
 import { draftProblem, parseOptions, toDraft, type DraftField } from '@/lib/preChatForm'
 import { useAuthStore } from '@/store/authStore'
 import type {
@@ -1289,7 +1291,44 @@ function NavBtn({
   )
 }
 
+function waitedFor(since: string, now: number): string {
+  const minutes = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000))
+  if (minutes < 1) return 'under a minute'
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours} h ${minutes % 60} min` : `${Math.floor(hours / 24)} days`
+}
+
+// With no chat open: what's waiting and a way straight to it, or, before the
+// first chat ever arrives, how to get the widget onto the site.
 function EmptyState({ onInstall, copied }: { onInstall: () => void; copied: boolean }) {
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const now = useNow()
+  const { data: conversations = [], isLoading } = useQuery({ queryKey: ['conversations'], queryFn: () => getConversations() })
+  if (isLoading) return null
+
+  const waiting = conversations
+    .filter((c) => c.status === 'waiting')
+    .sort((a, b) => (a.waiting_since ?? a.created_at).localeCompare(b.waiting_since ?? b.created_at))
+  const oldest = waiting[0]
+  const mine = conversations.filter((c) => c.status !== 'closed' && c.assigned_to_id === user?.id).length
+  const unassigned = conversations.filter((c) => c.status !== 'closed' && !c.assigned_to_id).length
+  const firstChat = conversations.length === 0
+
+  const installButton = (
+    <button
+      onClick={onInstall}
+      className={`w-full text-sm font-medium py-2.5 rounded-xl ring-1 transition-all duration-200 ${
+        copied
+          ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
+          : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
+      }`}
+    >
+      {copied ? '✓ Embed code copied!' : 'Copy widget install snippet'}
+    </button>
+  )
+
   return (
     <div className="h-full flex items-center justify-center p-8">
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-zinc-200 p-10 flex flex-col items-center gap-5 text-center max-w-sm w-full">
@@ -1298,23 +1337,63 @@ function EmptyState({ onInstall, copied }: { onInstall: () => void; copied: bool
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
           </svg>
         </div>
-        <div>
-          <p className="font-semibold text-zinc-900 tracking-tight">No conversation selected</p>
-          <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
-            Select a thread from the inbox to start replying, or install your chat widget to begin receiving messages.
-          </p>
-        </div>
-        <button
-          onClick={onInstall}
-          className={`w-full text-sm font-medium py-2.5 rounded-xl ring-1 transition-all duration-200 ${
-            copied
-              ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
-              : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
-          }`}
-        >
-          {copied ? '✓ Embed code copied!' : 'Copy widget install snippet'}
-        </button>
+
+        {firstChat ? (
+          <>
+            <div>
+              <p className="font-semibold text-zinc-900 tracking-tight">Waiting for your first chat</p>
+              <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+                Add the widget to your site and chats appear here as soon as a visitor writes.
+              </p>
+            </div>
+            <ol className="w-full text-left flex flex-col gap-2.5 text-sm">
+              <li className="flex gap-2.5"><Step n={1} />Copy the install snippet below.</li>
+              <li className="flex gap-2.5"><Step n={2} />Paste it before <code className="text-xs bg-zinc-100 rounded px-1">&lt;/body&gt;</code> on every page.</li>
+              <li className="flex gap-2.5"><Step n={3} />Open your site and say hello to test it.</li>
+            </ol>
+            {installButton}
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="font-semibold text-zinc-900 tracking-tight">
+                {waiting.length === 0 ? "You're all caught up" : waiting.length === 1 ? '1 visitor is waiting' : `${waiting.length} visitors are waiting`}
+              </p>
+              <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+                {oldest
+                  ? `The longest has waited ${waitedFor(oldest.waiting_since ?? oldest.created_at, now)}.`
+                  : 'Nobody needs a reply right now. New chats show up in the list as they arrive.'}
+              </p>
+            </div>
+            <dl className="w-full grid grid-cols-2 gap-2">
+              <div className="bg-zinc-50 rounded-xl py-3">
+                <dd className="text-xl font-semibold text-zinc-900 tabular-nums">{mine}</dd>
+                <dt className="text-xs text-zinc-500 mt-0.5">Assigned to you</dt>
+              </div>
+              <div className="bg-zinc-50 rounded-xl py-3">
+                <dd className="text-xl font-semibold text-zinc-900 tabular-nums">{unassigned}</dd>
+                <dt className="text-xs text-zinc-500 mt-0.5">Unassigned</dt>
+              </div>
+            </dl>
+            {oldest ? (
+              <button
+                onClick={() => navigate(`/app/c/${oldest.id}`)}
+                className="w-full text-sm font-medium py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white transition-colors duration-200"
+              >
+                Open the longest wait
+              </button>
+            ) : installButton}
+          </>
+        )}
       </div>
     </div>
+  )
+}
+
+function Step({ n }: { n: number }) {
+  return (
+    <span className="w-5 h-5 flex-shrink-0 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold flex items-center justify-center" aria-hidden>
+      {n}
+    </span>
   )
 }
