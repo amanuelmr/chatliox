@@ -98,6 +98,7 @@ async def conversation_ws(
     # JWT decode is pure in-process CPU work (HMAC-SHA256) — no thread pool needed.
 
     effective_user_id: str
+    agent_name: str | None = None
 
     if token is not None:
         sub = decode_access_token(token)
@@ -121,6 +122,7 @@ async def conversation_ws(
             return
 
         effective_user_id = str(user.id)
+        agent_name = user.full_name
 
     elif visitor_id is not None:
         if str(conv.visitor_id) != visitor_id:
@@ -145,6 +147,9 @@ async def conversation_ws(
         {"type": "presence", "user_id": effective_user_id, "status": "online"},
         exclude=websocket,
     )
+    if not is_visitor:
+        manager.viewer_joined(conversation_id, effective_user_id, agent_name, websocket)
+        await manager.broadcast_viewers(conversation_id)
 
     # ── 4. Message loop ───────────────────────────────────────────────────────
     try:
@@ -161,6 +166,8 @@ async def conversation_ws(
                     {
                         "type": "typing",
                         "user_id": effective_user_id,
+                        "sender_type": "visitor" if is_visitor else "admin",
+                        "name": agent_name,
                         "is_typing": bool(event.get("is_typing", False)),
                     },
                     exclude=websocket,
@@ -174,6 +181,9 @@ async def conversation_ws(
             manager.visitor_disconnected(conversation_id)
             # Everything sent up to now was delivered live, so it isn't "missed".
             await touch_visitor_last_seen(db, conv_uuid)
+        else:
+            manager.viewer_left(conversation_id, effective_user_id, websocket)
+            await manager.broadcast_viewers(conversation_id)
         await manager.broadcast(
             conversation_id,
             {"type": "presence", "user_id": effective_user_id, "status": "offline"},

@@ -33,10 +33,20 @@ export interface Message {
 
 // WebSocket event discriminated union — every frame has a `type` field
 export type WsMessageEvent  = Message & { type: 'message' }
-export type WsTypingEvent   = { type: 'typing';   user_id: string | null; is_typing: boolean }
+export type WsTypingEvent   = {
+  type: 'typing'
+  user_id: string | null
+  sender_type: SenderType
+  // The agent's name; null for the visitor.
+  name: string | null
+  is_typing: boolean
+}
 export type WsPresenceEvent = { type: 'presence'; user_id: string; status: 'online' | 'offline' }
 export type WsStatusEvent   = { type: 'status';   status: ConversationStatus }
-export type WsEvent = WsMessageEvent | WsTypingEvent | WsPresenceEvent | WsStatusEvent
+export interface Viewer { user_id: string; name: string }
+// Sent only to agents: who has the conversation open right now.
+export type WsViewersEvent  = { type: 'viewers';  agents: Viewer[] }
+export type WsEvent = WsMessageEvent | WsTypingEvent | WsPresenceEvent | WsStatusEvent | WsViewersEvent
 
 export interface CreateConversationRequest {
   visitor_id: string

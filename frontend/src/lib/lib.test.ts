@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { apiErrorMessage } from './apiError'
 import { isImageAttachment, resolveAttachmentUrl } from './attachments'
 import { draftProblem, parseOptions, toDraft, type DraftField } from './preChatForm'
+import { listNames } from './teammates'
 import { apiWsUrl } from './ws'
 
 function axiosError(status: number, data: unknown) {
@@ -72,5 +73,14 @@ describe('pre-chat form drafts', () => {
     expect(draftProblem([field({ label: 'Topic', type: 'select', optionsText: 'A, A' })])).toBe(
       '"Topic" has a repeated option.',
     )
+  })
+})
+
+describe('listNames', () => {
+  it('reads naturally for any number of teammates', () => {
+    expect(listNames(['Sam'])).toBe('Sam')
+    expect(listNames(['Sam', 'Ana'])).toBe('Sam and Ana')
+    expect(listNames(['Sam', 'Ana', 'Lee'])).toBe('Sam, Ana and Lee')
+    expect(listNames(['Sam', 'Ana', 'Lee', 'Bo'])).toBe('Sam, Ana and 2 others')
   })
 })

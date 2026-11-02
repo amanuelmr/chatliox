@@ -23,6 +23,7 @@ The project includes:
 - Internal notes that stay visible only to the team
 - Team invites and role-based access
 - Optional auto-assignment: new chats are handed out in turn to teammates who have the dashboard open
+- Collision detection: agents see which teammates have the same chat open and when one of them is typing a reply
 - Saved canned responses agents can insert into replies
 - Conversation tags and full-text search across the inbox
 - Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
