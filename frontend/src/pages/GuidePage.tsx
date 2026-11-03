@@ -29,6 +29,7 @@ const SECTIONS: Section[] = [
       { id: 'find-widget-key', label: 'Find your widget key' },
       { id: 'add-script', label: 'Add the script tag' },
       { id: 'verify', label: 'Verify it works' },
+      { id: 'own-button', label: 'Your own button and CSS' },
     ],
   },
   {
@@ -269,17 +270,14 @@ function Content() {
         routed to your inbox — and only yours.
       </P>
       <StepList steps={[
-        'Log in and open the Admin dashboard.',
-        'Click the <strong>gear icon</strong> in the left nav to open Settings.',
-        'Your widget key appears under <em>Embed your widget</em>. Copy it.',
+        'Log in and open the dashboard.',
+        'Click the <strong>&lt;/&gt; icon</strong> in the left nav. It copies the full install snippet, widget key included.',
       ]} />
 
       <SubHeading id="add-script">Add the script tag</SubHeading>
-      <P>Paste the following two snippets inside the <code className="text-[13px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700">&lt;head&gt;</code> of every page where you want the chat widget to appear.</P>
-      <CodeBlock code={`<script>
-  window.chatliox = { widgetKey: "YOUR_WIDGET_KEY" };
-</script>
-<script src="https://cdn.chatliox.io/widget.js" async></script>`} language="html" />
+      <P>Paste this just before <code className="text-[13px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700">&lt;/body&gt;</code> on every page where you want the chat widget to appear.</P>
+      <CodeBlock code={`<script src="https://cdn.chatliox.io/widget.js"
+        data-widget-key="YOUR_WIDGET_KEY" async></script>`} language="html" />
       <P>
         Replace <code className="text-[13px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700">YOUR_WIDGET_KEY</code> with the key from Settings.
         That's it — the widget loads automatically and floats in the bottom-right corner.
@@ -301,6 +299,26 @@ function Content() {
         mentioning <code className="font-mono">chatliox</code>. A 401 error usually means the
         widget key was copied incorrectly.
       </Callout>
+
+      <SubHeading id="own-button">Your own button and CSS</SubHeading>
+      <P>
+        In Settings → Widget you can put the chat button in any corner, show it on computers only,
+        or hide it completely. Then open the chat from anything on your site, such as a link in your
+        mobile menu, by adding one attribute:
+      </P>
+      <CodeBlock code={`<a href="#" data-chatliox-open>Chat with us</a>
+<!-- also: data-chatliox-close, data-chatliox-toggle -->
+<!-- or from JavaScript: window.chatliox.open() / close() / toggle() -->`} language="html" />
+      <P>
+        The <strong>Custom CSS</strong> box in the same place restyles anything: the button, the
+        unread badge, the chat window and the messages inside it. Our default styles never win over
+        yours, so you don't need <code className="text-[13px] bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700">!important</code>.
+      </P>
+      <CodeBlock code={`/* A square button that sits higher on phones */
+.chatliox-launcher { border-radius: 14px; }
+@media (max-width: 640px) {
+  .chatliox { --chatliox-offset-y: 88px; }
+}`} language="css" />
 
       {/* Inbox */}
       <SectionHeading id="inbox">Using the inbox</SectionHeading>

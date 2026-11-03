@@ -5,7 +5,7 @@ import { emailTranscript, getConversations, updateConversationStatus, updateConv
 import { getMessages, sendMessage, uploadAttachment } from '@/api/messages'
 import { isImageAttachment, resolveAttachmentUrl } from '@/lib/attachments'
 import { describeActions, hasActions, matchMacros, slashQuery } from '@/lib/macros'
-import { addIncoming, confirmSent } from '@/lib/messages'
+import { addIncoming, confirmSent, threadLayout } from '@/lib/messages'
 import { listNames } from '@/lib/teammates'
 import { describeBrowser, pageLabel, siteName } from '@/lib/visitor'
 import { useAuthStore } from '@/store/authStore'
@@ -378,7 +378,7 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
         </div>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-3 bg-zinc-50/40">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 flex flex-col bg-zinc-50/40">
           {isLoading && (
             <div className="flex justify-center py-12">
               <div className="w-5 h-5 rounded-full border-2 border-zinc-200 border-t-zinc-500 animate-spin" />
@@ -387,7 +387,18 @@ export default function AdminChatWindow({ conversationId }: { conversationId: st
           {!isLoading && messages.length === 0 && (
             <p className="text-center text-sm text-zinc-400 py-12">No messages yet.</p>
           )}
-          {messages.map((m) => <Bubble key={m.id} message={m} />)}
+          {threadLayout(messages).map(({ message: m, day, groupStart, groupEnd }) => (
+            <div key={m.id} className={groupStart ? 'mt-3 first:mt-0' : 'mt-0.5'}>
+              {day && (
+                <div className="flex items-center gap-3 py-2 mb-1" role="separator" aria-label={day}>
+                  <div className="flex-1 h-px bg-zinc-200" />
+                  <span className="text-[11px] font-medium text-zinc-400">{day}</span>
+                  <div className="flex-1 h-px bg-zinc-200" />
+                </div>
+              )}
+              <Bubble message={m} groupStart={groupStart} groupEnd={groupEnd} />
+            </div>
+          ))}
           {visitorDraft && !resolved && <DraftPreview draft={visitorDraft} />}
           {resolved && (
             <div className="flex items-center gap-3 py-2">
@@ -751,7 +762,7 @@ function AttachmentBlock({ message }: { message: Message }) {
   )
 }
 
-function Bubble({ message: m }: { message: Message }) {
+function Bubble({ message: m, groupStart = true, groupEnd = true }: { message: Message; groupStart?: boolean; groupEnd?: boolean }) {
   const isAdmin = m.sender_type === 'admin'
   const isPending = m.id.startsWith('opt-')
 
@@ -778,18 +789,23 @@ function Bubble({ message: m }: { message: Message }) {
     )
   }
 
+  // The corner on the sender's side is tucked in; inside a run, the top one is too.
+  const tail = isAdmin ? 'rounded-br-md' : 'rounded-bl-md'
   return (
-    <div className={`flex transition-opacity duration-150 ${isAdmin ? 'justify-end' : 'justify-start'} ${isPending ? 'opacity-60' : 'opacity-100'}`}>
-      <div className={`max-w-[72%] rounded-2xl px-4 py-3 ${
+    <div className={`flex flex-col transition-opacity duration-150 ${isAdmin ? 'items-end' : 'items-start'} ${isPending ? 'opacity-60' : 'opacity-100'}`}>
+      {isAdmin && groupStart && m.sender_name && (
+        <p className="text-[11px] text-zinc-400 mb-1 mr-1">{m.sender_name}</p>
+      )}
+      <div className={`max-w-[72%] rounded-2xl px-4 py-2.5 ${groupStart ? '' : isAdmin ? 'rounded-tr-md' : 'rounded-tl-md'} ${tail} ${
         isAdmin ? 'bg-brand-500 text-white' : 'bg-white ring-1 ring-zinc-200 text-zinc-800'
       }`}>
         {m.attachment_url ? <AttachmentBlock message={m} /> : (
           <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>
         )}
-        <p className={`text-[11px] mt-2 text-right ${isAdmin ? 'text-brand-100' : 'text-zinc-400'}`}>
-          {isPending ? '···' : fmt(m.created_at)}
-        </p>
       </div>
+      {groupEnd && (
+        <p className="text-[11px] text-zinc-400 mt-1 mx-1">{isPending ? 'Sending…' : fmt(m.created_at)}</p>
+      )}
     </div>
   )
 }

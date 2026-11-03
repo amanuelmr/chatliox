@@ -6,6 +6,11 @@ class DailyVolume(BaseModel):
     count: int
 
 
+class CsatBucket(BaseModel):
+    rating: int
+    count: int
+
+
 class AgentStat(BaseModel):
     agent_name: str
     resolved_count: int
@@ -22,5 +27,7 @@ class AnalyticsSummaryResponse(BaseModel):
     first_response_within_target_pct: float | None
     avg_csat: float | None
     csat_response_count: int
+    # How many chats got each rating, 5 stars first.
+    csat_breakdown: list[CsatBucket]
     volume_by_day: list[DailyVolume]
     per_agent: list[AgentStat]

@@ -12,7 +12,7 @@ export default function WelcomePage() {
   const inviteToken = user?.organization?.invite_token ?? ''
 
   const embedCode = widgetKey
-    ? `<iframe src="${window.location.origin}/widget?key=${widgetKey}" style="position:fixed;bottom:0;right:0;width:420px;height:640px;border:none;z-index:2147483647;background:transparent;" allowtransparency="true" title="Chat Support"></iframe>`
+    ? `<script src="${window.location.origin}/widget.js" data-widget-key="${widgetKey}" async><\/script>`
     : ''
 
   const copyEmbed = () => {

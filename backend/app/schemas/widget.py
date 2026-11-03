@@ -14,7 +14,9 @@ from pydantic import (
 HexColor = Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]
 GreetingStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=280)]
 IconUrl = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500, pattern=r"^https?://.+")]
-WidgetPosition = Literal["left", "right"]
+WidgetPosition = Literal["left", "right", "top-left", "top-right"]
+WidgetLauncher = Literal["always", "desktop", "never"]
+CustomCss = Annotated[str, StringConstraints(max_length=20_000)]
 ClockTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
 FieldRequirement = Literal["hidden", "optional", "required"]
 ShortLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
@@ -54,6 +56,8 @@ class WidgetConfigResponse(BaseModel):
     widget_color: str
     widget_greeting: str
     widget_position: WidgetPosition
+    widget_launcher: WidgetLauncher
+    widget_custom_css: str
     widget_icon_url: str | None
     widget_width: int
     widget_height: int
@@ -116,6 +120,8 @@ class UpdateWidgetConfigRequest(BaseModel):
     widget_color: HexColor | None = Field(default=None)
     widget_greeting: GreetingStr | None = Field(default=None)
     widget_position: WidgetPosition | None = Field(default=None)
+    widget_launcher: WidgetLauncher | None = Field(default=None)
+    widget_custom_css: CustomCss | None = Field(default=None)
     # Empty string clears a previously-set custom icon back to the built-in default.
     widget_icon_url: IconUrl | Literal[""] | None = Field(default=None)
     widget_width: int | None = Field(default=None, ge=320, le=520)

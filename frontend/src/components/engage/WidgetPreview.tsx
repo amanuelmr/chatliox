@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { QuickReplies, TeamBubbles } from '@/components/widget/WelcomeThread'
 import { formatMinutes } from '@/lib/responseTime'
+import type { WidgetPosition } from '@/types/auth'
 
 export type PreviewState = 'open' | 'closed'
 
@@ -8,7 +9,7 @@ interface Props {
   brandColor: string
   teamName: string
   greeting: string
-  position: 'left' | 'right'
+  position: WidgetPosition
   // The team's first-response target, which the widget header shows.
   replyWithinMinutes: number | null
   welcomeMessages: string[]
@@ -31,7 +32,9 @@ const CHAT_ICON = (
 // so the team sees what visitors will get before saving.
 export default function WidgetPreview(props: Props) {
   const { brandColor, position, state, pageUrl, teaser, hiddenReason } = props
-  const side = position === 'left' ? 'left-4 items-start' : 'right-4 items-end'
+  // Top corners put the launcher first, with the chat opening below it.
+  const top = position.startsWith('top')
+  const side = `${position.endsWith('left') ? 'left-4 items-start' : 'right-4 items-end'} ${top ? 'top-4 flex-col-reverse' : 'bottom-4 flex-col'}`
 
   return (
     <figure className="rounded-2xl bg-white ring-1 ring-zinc-200 shadow-[0_24px_60px_-28px_rgba(24,24,27,0.35)] overflow-hidden" aria-label="Widget preview">
@@ -68,7 +71,7 @@ export default function WidgetPreview(props: Props) {
             <p className="text-xs text-white/70 mt-0.5">{hiddenReason}</p>
           </div>
         ) : (
-          <div className={`absolute bottom-4 flex flex-col gap-3 ${side}`}>
+          <div className={`absolute flex gap-3 ${side}`}>
             {state === 'open' ? <Panel {...props} /> : teaser ? <Teaser text={teaser} {...props} /> : null}
             <span
               className="w-12 h-12 rounded-full text-white flex items-center justify-center shadow-lg relative"

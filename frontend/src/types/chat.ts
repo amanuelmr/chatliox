@@ -8,6 +8,9 @@ export interface Conversation {
   visitor_email: string | null
   status: ConversationStatus
   last_message_at: string | null
+  // The latest message the visitor can see, shortened, and who sent it.
+  last_message_preview: string | null
+  last_message_sender: SenderType | null
   created_at: string
   assigned_to_id: string | null
   assigned_to_name: string | null

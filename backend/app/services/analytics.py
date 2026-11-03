@@ -57,17 +57,18 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
     csat_ratings = [r[0] for r in csat_rows.all()]
     avg_csat = sum(csat_ratings) / len(csat_ratings) if csat_ratings else None
 
-    since = datetime.now(timezone.utc) - timedelta(days=7)
+    # The last seven days including today, with quiet days as zero so the chart has no gaps.
+    today = datetime.now(timezone.utc).date()
+    days = [today - timedelta(days=n) for n in range(6, -1, -1)]
+    since = datetime.combine(days[0], datetime.min.time(), tzinfo=timezone.utc)
     day_expr = func.date_trunc("day", Conversation.created_at)
     volume_rows = await db.execute(
         select(day_expr, func.count())
         .where(Conversation.organization_id == organization_id, Conversation.created_at >= since)
         .group_by(day_expr)
-        .order_by(day_expr)
     )
-    volume_by_day = [
-        {"date": day.date().isoformat(), "count": count} for day, count in volume_rows.all()
-    ]
+    counts_by_day = {day.date(): count for day, count in volume_rows.all()}
+    volume_by_day = [{"date": day.isoformat(), "count": counts_by_day.get(day, 0)} for day in days]
 
     agent_rows = await db.execute(
         select(User.full_name, func.count())
@@ -91,6 +92,7 @@ async def get_analytics_summary(db: AsyncSession, organization_id: uuid.UUID) ->
         "first_response_within_target_pct": within_target_pct,
         "avg_csat": avg_csat,
         "csat_response_count": len(csat_ratings),
+        "csat_breakdown": [{"rating": r, "count": csat_ratings.count(r)} for r in range(5, 0, -1)],
         "volume_by_day": volume_by_day,
         "per_agent": per_agent,
     }

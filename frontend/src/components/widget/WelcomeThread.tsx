@@ -17,7 +17,7 @@ export function TeamBubbles({ messages, brandColor, teamName }: { messages: stri
         {messages.map((text, i) => (
           <p
             key={i}
-            className={`max-w-[15rem] bg-white ring-1 ring-zinc-200/80 text-sm text-zinc-800 leading-snug px-3.5 py-2 whitespace-pre-wrap break-words rounded-2xl ${
+            className={`chatliox-team-message max-w-[15rem] bg-white ring-1 ring-zinc-200/80 text-sm text-zinc-800 leading-snug px-3.5 py-2 whitespace-pre-wrap break-words rounded-2xl ${
               // The last bubble points at the avatar, like one person sending several messages.
               i === messages.length - 1 ? 'rounded-bl-md' : ''
             }`}
@@ -51,7 +51,7 @@ export function QuickReplies({
           disabled={disabled}
           onClick={() => onPick?.(reply)}
           style={{ color: brandColor, borderColor: brandColor }}
-          className="text-[13px] font-medium px-3 py-1.5 rounded-full border-[1.5px] bg-white transition-colors duration-150 hover:bg-zinc-50 disabled:opacity-50"
+          className="chatliox-quick-reply text-[13px] font-medium px-3 py-1.5 rounded-full border-[1.5px] bg-white transition-colors duration-150 hover:bg-zinc-50 disabled:opacity-50"
         >
           {reply}
         </button>

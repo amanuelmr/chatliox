@@ -9,6 +9,7 @@ import type {
   Teammate,
   UserRole,
   WidgetDevices,
+  WidgetLauncher,
   WidgetPosition,
 } from '@/types/auth'
 
@@ -29,6 +30,8 @@ export interface WidgetConfig {
   pre_chat_fields: PreChatField[]
   first_response_minutes: number | null
   typing_preview: boolean
+  widget_launcher: WidgetLauncher
+  widget_custom_css: string
   welcome_messages: string[]
   quick_replies: string[]
   proactive_messages: ProactiveMessage[]
@@ -42,6 +45,8 @@ export interface UpdateWidgetConfigRequest {
   widget_color?: string
   widget_greeting?: string
   widget_position?: WidgetPosition
+  widget_launcher?: WidgetLauncher
+  widget_custom_css?: string
   widget_icon_url?: string
   widget_width?: number
   widget_height?: number

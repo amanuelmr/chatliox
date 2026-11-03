@@ -45,6 +45,8 @@ const config = (patch: Partial<WidgetConfig> = {}): WidgetConfig => ({
   widget_color: '#4f6ef7',
   widget_greeting: 'Hi there',
   widget_position: 'right',
+  widget_launcher: 'always',
+  widget_custom_css: '',
   widget_icon_url: null,
   widget_width: 376,
   widget_height: 600,

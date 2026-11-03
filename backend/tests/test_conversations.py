@@ -149,3 +149,19 @@ async def test_only_the_chats_visitor_can_write_as_the_visitor(client: AsyncClie
     assert res.status_code == 404
     res = await client.post("/messages", json={**message, "visitor_id": conv["visitor_id"]})
     assert res.status_code == 201
+
+
+async def test_the_inbox_shows_the_latest_message_the_visitor_can_see(client, admin, start_chat):
+    chat = await start_chat(admin, "Do  these\nboots run small?")
+
+    async def latest():
+        convs = (await client.get("/conversations", headers=admin["headers"])).json()
+        conv = next(c for c in convs if c["id"] == chat["id"])
+        return conv["last_message_preview"], conv["last_message_sender"]
+
+    assert await latest() == ("Do these boots run small?", "visitor")
+    # Internal notes stay out of the preview.
+    await _reply(client, admin, chat, "VIP customer", is_internal=True)
+    assert await latest() == ("Do these boots run small?", "visitor")
+    await _reply(client, admin, chat, "x" * 300)
+    assert await latest() == ("x" * 200, "admin")

@@ -97,3 +97,18 @@ async def test_display_rules_are_cleaned_up_and_reach_the_widget(client: AsyncCl
 
     for bad in ({"widget_devices": "tablet"}, {"widget_allowed_domains": ["shop .com"]}):
         assert (await client.put("/organizations/display-rules", headers=admin["headers"], json=bad)).status_code == 422
+
+
+async def test_the_launcher_can_move_hide_and_take_the_teams_own_css(client: AsyncClient, admin: dict):
+    css = ".chatliox-launcher { border-radius: 12px; }\n.chatliox-header { background: #111; }"
+    res = await client.patch(
+        "/organizations/widget",
+        headers=admin["headers"],
+        json={"widget_position": "top-left", "widget_launcher": "desktop", "widget_custom_css": css},
+    )
+    assert res.status_code == 200, res.text
+    widget = (await _widget(client, admin)).json()
+    assert (widget["widget_position"], widget["widget_launcher"], widget["widget_custom_css"]) == ("top-left", "desktop", css)
+
+    for bad in ({"widget_position": "middle"}, {"widget_launcher": "sometimes"}, {"widget_custom_css": "a" * 20_001}):
+        assert (await client.patch("/organizations/widget", headers=admin["headers"], json=bad)).status_code == 422

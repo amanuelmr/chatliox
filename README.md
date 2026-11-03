@@ -34,7 +34,7 @@ The project includes:
 - A live visitor list: who is on the site right now, which page they're on, how long they've been there and whether they have a chat
 - Visitor context: each chat shows the pages the visitor moved through, their browser and the site that sent them
 - Conversation tags and full-text search across the inbox
-- Customizable widget branding (color, greeting, launcher icon, position, panel size and edge offsets)
+- Customizable widget branding (color, greeting, launcher icon, any corner, panel size and edge offsets), your own CSS for the launcher and chat window, and the option to open the chat from your own buttons instead of the built-in launcher
 - An analytics view with volume, first response time, and per-agent stats
 - Visitor CSAT ratings on resolved conversations
 - Missed-reply emails: if a visitor who left their email closes the chat before an agent answers, the replies are emailed to them

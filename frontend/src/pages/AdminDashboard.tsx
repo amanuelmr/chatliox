@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import AdminChatWindow from '@/components/AdminChatWindow'
 import EngageView from '@/components/engage/EngageView'
+import WidgetPreview from '@/components/engage/WidgetPreview'
 import ConversationList from '@/components/ConversationList'
 import SavedRepliesCard from '@/components/SavedRepliesCard'
 import Spinner from '@/components/Spinner'
@@ -22,6 +23,8 @@ import {
   updateWidgetConfig,
 } from '@/api/organizations'
 import { useDashboardSocket } from '@/hooks/useDashboardSocket'
+import { getConversations } from '@/api/conversations'
+import { useNow } from '@/hooks/useNow'
 import { draftProblem, parseOptions, toDraft, type DraftField } from '@/lib/preChatForm'
 import { useAuthStore } from '@/store/authStore'
 import type {
@@ -31,6 +34,7 @@ import type {
   Organization,
   User,
   UserRole,
+  WidgetLauncher,
   WidgetPosition,
 } from '@/types/auth'
 
@@ -89,11 +93,25 @@ export default function AdminDashboard() {
             </svg>
           </NavBtn>
 
-          <NavBtn title={copied ? 'Copied!' : 'Install widget'} onClick={copyEmbed}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
-            </svg>
-          </NavBtn>
+          <div className="relative">
+            <NavBtn title="Copy the widget install snippet" onClick={copyEmbed} active={copied}>
+              {copied ? (
+                <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                </svg>
+              )}
+            </NavBtn>
+            {/* The button's tooltip only shows on hover, so say it out loud. */}
+            {copied && (
+              <span role="status" className="absolute left-full top-1/2 -translate-y-1/2 ml-2 whitespace-nowrap rounded-lg bg-zinc-900 text-white text-xs font-medium px-2.5 py-1.5 shadow-lg z-50">
+                Install snippet copied
+              </span>
+            )}
+          </div>
 
           <NavBtn title="Analytics" active={view === 'analytics'} onClick={() => setView('analytics')}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -253,8 +271,11 @@ function AnalyticsView() {
 
   return (
     <main className="flex-1 bg-zinc-100 overflow-auto">
-      <div className="max-w-3xl mx-auto py-10 px-6 flex flex-col gap-6">
-        <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Analytics</h2>
+      <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">Analytics</h2>
+          <p className="text-sm text-zinc-500 mt-0.5">How many people reached out, how fast your team answered, and how they felt about it.</p>
+        </div>
 
         {/* Stat tiles */}
         <div className={`grid grid-cols-2 gap-3 ${
@@ -281,29 +302,56 @@ function AnalyticsView() {
           />
         </div>
 
-        {/* Volume by day */}
-        <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6">
-          <p className="text-sm font-semibold text-zinc-900 mb-4">Conversations, last 7 days</p>
-          {data.volume_by_day.length === 0 ? (
-            <p className="text-xs text-zinc-400 text-center py-8">No conversations in this period.</p>
-          ) : (
-            <div className="flex items-end gap-3 h-32">
-              {data.volume_by_day.map((d) => (
-                <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5">
-                  <div className="w-full flex-1 flex items-end">
-                    <div
-                      className="w-full bg-brand-500 rounded-t-md transition-all duration-300"
-                      style={{ height: `${(d.count / maxDaily) * 100}%`, minHeight: d.count > 0 ? '4px' : 0 }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  </span>
-                  <span className="text-[10px] font-semibold text-zinc-600">{d.count}</span>
-                </div>
-              ))}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Volume by day */}
+          <div className="lg:col-span-2 bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6">
+            <div className="flex items-baseline justify-between mb-5">
+              <p className="text-sm font-semibold text-zinc-900">New chats, last 7 days</p>
+              <p className="text-xs text-zinc-500 tabular-nums">{data.volume_by_day.reduce((n, d) => n + d.count, 0)} in total</p>
             </div>
-          )}
+            <div className="flex gap-2 h-40" role="img" aria-label="New chats per day for the last 7 days">
+              {data.volume_by_day.map((d, i) => {
+                const today = i === data.volume_by_day.length - 1
+                return (
+                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                    <div className="w-full flex-1 flex flex-col justify-end items-center gap-1">
+                      <span className={`text-[11px] font-semibold tabular-nums ${d.count ? 'text-zinc-700' : 'text-zinc-300'}`}>{d.count}</span>
+                      <div
+                        className={`w-full max-w-[44px] rounded-md transition-all duration-300 ${today ? 'bg-brand-500' : 'bg-brand-400/40'}`}
+                        style={{ height: `${(d.count / maxDaily) * 100}%`, minHeight: 3 }}
+                      />
+                    </div>
+                    <span className={`text-[11px] ${today ? 'font-semibold text-zinc-900' : 'text-zinc-400'}`}>
+                      {today ? 'Today' : new Date(`${d.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Ratings */}
+          <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6">
+            <div className="flex items-baseline justify-between mb-5">
+              <p className="text-sm font-semibold text-zinc-900">Visitor ratings</p>
+              <p className="text-xs text-zinc-500 tabular-nums">{data.csat_response_count} rated</p>
+            </div>
+            {data.csat_response_count === 0 ? (
+              <p className="text-xs text-zinc-400 py-8 text-center">Visitors can rate a chat once it's resolved. No ratings yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {data.csat_breakdown.map((b) => (
+                  <li key={b.rating} className="flex items-center gap-3 text-xs">
+                    <span className="w-14 text-amber-500 tracking-tight" aria-label={`${b.rating} stars`}>{'★'.repeat(b.rating)}</span>
+                    <span className="flex-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                      <span className="block h-full rounded-full bg-amber-400" style={{ width: `${(b.count / data.csat_response_count) * 100}%` }} />
+                    </span>
+                    <span className="w-6 text-right tabular-nums text-zinc-600">{b.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         {/* Per agent */}
@@ -365,6 +413,11 @@ function SettingsView({
   const [sendError, setSendError] = useState<string | null>(null)
 
   const inviteUrl = `${window.location.origin}/join/${inviteToken}`
+  const [section, setSectionState] = useState<SettingsSection>(savedSettingsSection)
+  const setSection = (next: SettingsSection) => {
+    setSectionState(next)
+    try { localStorage.setItem(SETTINGS_SECTION_KEY, next) } catch { /* private mode */ }
+  }
 
   const copyInvite = () => {
     navigator.clipboard.writeText(inviteUrl).then(() => {
@@ -411,102 +464,149 @@ function SettingsView({
 
   return (
     <main className="flex-1 bg-zinc-100 overflow-auto">
-      <div className="max-w-lg mx-auto py-10 px-6 flex flex-col gap-6">
-        <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Settings</h2>
-
-        {/* Invite teammates */}
-        <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
-          <div>
-            <p className="text-sm font-semibold text-zinc-900">Invite teammates</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Enter an email address to send an invite, or copy the link to share manually.</p>
-          </div>
-
-          {/* Email invite */}
-          <div className="flex gap-2">
-            <input
-              type="email"
-              placeholder="teammate@company.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendEmailInvite()}
-              className="flex-1 min-w-0 rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
-            />
-            <button
-              onClick={sendEmailInvite}
-              disabled={!inviteEmail.trim() || sending}
-              className={`flex-shrink-0 text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
-                sendStatus === 'sent' ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
-              }`}
-            >
-              {sending ? (
-                <span className="flex items-center gap-1.5">
-                  <Spinner size="xs" variant="white" />
-                  Sending…
-                </span>
-              ) : sendStatus === 'sent' ? '✓ Sent!' : 'Send invite'}
-            </button>
-          </div>
-          {sendStatus === 'error' && sendError && (
-            <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              {sendError}
-            </p>
-          )}
-
-          {/* Copy link */}
-          <div>
-            <p className="text-xs text-zinc-400 mb-1.5">Or share invite link directly</p>
-            <div className="flex gap-2">
-              <input
-                readOnly
-                value={inviteUrl}
-                className="flex-1 min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 outline-none select-all"
-              />
-              <button
-                onClick={copyInvite}
-                className={`flex-shrink-0 text-xs font-medium px-3 py-2 rounded-lg ring-1 transition-all duration-200 ${
-                  copiedInvite
-                    ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
-                    : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
-                }`}
-              >
-                {copiedInvite ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={handleRotate}
-            disabled={rotating}
-            className="self-start text-xs font-medium text-zinc-400 hover:text-zinc-700 disabled:opacity-50 transition-colors"
-          >
-            {rotating ? 'Rotating…' : 'Rotate link (revokes old invites)'}
-          </button>
+      <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">Settings</h2>
+          <p className="text-sm text-zinc-500 mt-0.5">How your widget looks, when your team is around, and who answers which chats.</p>
         </div>
 
-        {/* Widget appearance */}
-        <WidgetAppearanceCard user={user} token={token} setAuth={setAuth} />
+        <div className="flex flex-wrap gap-1 border-b border-zinc-200" role="tablist" aria-label="Settings sections">
+          {SETTINGS_SECTIONS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={section === t.id}
+              onClick={() => setSection(t.id)}
+              className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap transition-colors ${
+                section === t.id ? 'border-brand-500 text-zinc-900 font-semibold' : 'border-transparent text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-        {/* Business hours */}
-        <BusinessHoursCard user={user} token={token} setAuth={setAuth} />
+        {section === 'team' && (
+          <div className="grid gap-6 lg:grid-cols-2 items-start">
+            {/* Invite teammates */}
+            <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900">Invite teammates</p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  We'll email them a link to join {user?.organization.name ?? 'your workspace'}. You can also copy the link and send it yourself.
+                </p>
+              </div>
 
-        {/* Pre-chat form */}
-        <PreChatFormCard user={user} token={token} setAuth={setAuth} />
+              {/* Email invite */}
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  placeholder="teammate@company.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendEmailInvite()}
+                  className="flex-1 min-w-0 rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition"
+                />
+                <button
+                  onClick={sendEmailInvite}
+                  disabled={!inviteEmail.trim() || sending}
+                  className={`flex-shrink-0 text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-40 text-white transition-all duration-200 ${
+                    sendStatus === 'sent' ? 'bg-emerald-600' : 'bg-brand-500 hover:bg-brand-600'
+                  }`}
+                >
+                  {sending ? (
+                    <span className="flex items-center gap-1.5">
+                      <Spinner size="xs" variant="white" />
+                      Sending…
+                    </span>
+                  ) : sendStatus === 'sent' ? '✓ Sent!' : 'Send invite'}
+                </button>
+              </div>
+              {sendStatus === 'error' && sendError && (
+                <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  {sendError}
+                </p>
+              )}
 
-        {/* Chat assignment */}
-        <AutoAssignCard user={user} token={token} setAuth={setAuth} />
-        <TypingPreviewCard user={user} token={token} setAuth={setAuth} />
+              {/* Copy link */}
+              <div>
+                <p className="text-xs text-zinc-400 mb-1.5">Or share the invite link</p>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={inviteUrl}
+                    className="flex-1 min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 outline-none select-all"
+                  />
+                  <button
+                    onClick={copyInvite}
+                    className={`flex-shrink-0 text-xs font-medium px-3 py-2 rounded-lg ring-1 transition-all duration-200 ${
+                      copiedInvite
+                        ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
+                        : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                  >
+                    {copiedInvite ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
 
-        {/* First-response target */}
-        <ResponseTargetCard user={user} token={token} setAuth={setAuth} />
+              <button
+                onClick={handleRotate}
+                disabled={rotating}
+                className="self-start text-xs font-medium text-zinc-400 hover:text-zinc-700 disabled:opacity-50 transition-colors"
+              >
+                {rotating ? 'Making a new link…' : 'Make a new link (the old one stops working)'}
+              </button>
+            </div>
 
-        {/* Team members */}
-        <TeamMembersCard currentUserId={user?.id ?? ''} />
+            <TeamMembersCard currentUserId={user?.id ?? ''} />
+          </div>
+        )}
 
-        {/* Saved replies */}
-        <SavedRepliesCard />
+        {section === 'widget' && <WidgetAppearanceCard user={user} token={token} setAuth={setAuth} />}
+
+        {section === 'hours' && <BusinessHoursCard user={user} token={token} setAuth={setAuth} />}
+
+        {section === 'pre-chat' && <PreChatFormCard user={user} token={token} setAuth={setAuth} />}
+
+        {section === 'routing' && (
+          <div className="grid gap-6 lg:grid-cols-2 items-start">
+            <div className="flex flex-col gap-6">
+              <AutoAssignCard user={user} token={token} setAuth={setAuth} />
+              <TypingPreviewCard user={user} token={token} setAuth={setAuth} />
+            </div>
+            <ResponseTargetCard user={user} token={token} setAuth={setAuth} />
+          </div>
+        )}
+
+        {section === 'replies' && <SavedRepliesCard />}
       </div>
     </main>
   )
+}
+
+const SETTINGS_SECTION_KEY = 'settings-section'
+
+const SETTINGS_SECTIONS = [
+  { id: 'team', label: 'Team' },
+  { id: 'widget', label: 'Widget' },
+  { id: 'hours', label: 'Business hours' },
+  { id: 'pre-chat', label: 'Pre-chat form' },
+  { id: 'routing', label: 'Chat routing' },
+  { id: 'replies', label: 'Saved replies' },
+] as const
+
+type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id']
+
+// Reopens the section you were last in.
+function savedSettingsSection(): SettingsSection {
+  try {
+    const saved = localStorage.getItem(SETTINGS_SECTION_KEY)
+    return SETTINGS_SECTIONS.find((t) => t.id === saved)?.id ?? 'team'
+  } catch {
+    return 'team'
+  }
 }
 
 function WidgetAppearanceCard({
@@ -527,6 +627,9 @@ function WidgetAppearanceCard({
   const [height, setHeight] = useState(org?.widget_height ?? 600)
   const [offsetX, setOffsetX] = useState(org?.widget_offset_x ?? 20)
   const [offsetY, setOffsetY] = useState(org?.widget_offset_y ?? 20)
+  const [launcher, setLauncher] = useState<WidgetLauncher>(org?.widget_launcher ?? 'always')
+  const [customCss, setCustomCss] = useState(org?.widget_custom_css ?? '')
+  const [copiedButton, setCopiedButton] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const iconUrlValid = iconUrl.trim() === '' || /^https?:\/\/.+/.test(iconUrl.trim())
@@ -542,6 +645,8 @@ function WidgetAppearanceCard({
         widget_height: height,
         widget_offset_x: offsetX,
         widget_offset_y: offsetY,
+        widget_launcher: launcher,
+        widget_custom_css: customCss,
       }),
     onSuccess: (updatedOrg) => {
       if (token && user) setAuth(token, { ...user, organization: updatedOrg })
@@ -551,14 +656,16 @@ function WidgetAppearanceCard({
   })
 
   return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] items-start">
     <div className="bg-white rounded-xl ring-1 ring-zinc-200 shadow-sm p-6 flex flex-col gap-4">
       <div>
         <p className="text-sm font-semibold text-zinc-900">Widget appearance</p>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Customize color, launcher icon, position and size — visitors see this without any changes to the install snippet.
+          Make the chat look like part of your site. Changes reach visitors on their next page load; the install snippet stays the same.
         </p>
       </div>
 
+      <p className="text-xs font-medium text-zinc-700 -mb-2">Brand colour</p>
       <div className="flex items-center gap-3">
         <input
           type="color"
@@ -574,7 +681,9 @@ function WidgetAppearanceCard({
         />
       </div>
 
+      <label className="text-xs font-medium text-zinc-700 -mb-2" htmlFor="widget-greeting">Greeting</label>
       <textarea
+        id="widget-greeting"
         value={greeting}
         onChange={(e) => setGreeting(e.target.value)}
         rows={2}
@@ -584,22 +693,79 @@ function WidgetAppearanceCard({
       />
 
       <div>
-        <p className="text-xs font-medium text-zinc-700 mb-1.5">Launcher position</p>
-        <div className="flex gap-2">
-          {(['right', 'left'] as const).map((p) => (
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Where the chat button sits</p>
+        <div className="grid grid-cols-2 gap-2 max-w-xs" role="radiogroup" aria-label="Where the chat button sits">
+          {WIDGET_CORNERS.map((c) => (
             <button
-              key={p}
+              key={c.value}
               type="button"
-              onClick={() => setPosition(p)}
-              className={`flex-1 text-sm rounded-lg px-3 py-2 ring-1 transition-all duration-150 ${
-                position === p
-                  ? 'bg-brand-50 ring-brand-300 text-brand-700 font-medium'
-                  : 'ring-zinc-200 text-zinc-600 hover:bg-zinc-50'
+              role="radio"
+              aria-checked={position === c.value}
+              onClick={() => setPosition(c.value)}
+              className={`relative h-14 rounded-lg ring-1 transition-all duration-150 text-[11px] ${
+                position === c.value ? 'bg-brand-50 ring-brand-300 text-brand-700 font-medium' : 'ring-zinc-200 text-zinc-500 hover:bg-zinc-50'
               }`}
             >
-              Bottom {p}
+              <span
+                className={`absolute w-3 h-3 rounded-full ${position === c.value ? 'bg-brand-500' : 'bg-zinc-300'} ${
+                  c.value.startsWith('top') ? 'top-2' : 'bottom-2'
+                } ${c.value.endsWith('left') ? 'left-2' : 'right-2'}`}
+                aria-hidden
+              />
+              {c.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-zinc-700 mb-1.5">Show the chat button</p>
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Show the chat button">
+          {WIDGET_LAUNCHER_OPTIONS.map((o) => (
+            <label
+              key={o.value}
+              className={`flex items-start gap-2.5 rounded-lg px-3 py-2 ring-1 cursor-pointer ${
+                launcher === o.value ? 'bg-brand-50 ring-brand-300' : 'ring-zinc-200 hover:bg-zinc-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="widget-launcher"
+                checked={launcher === o.value}
+                onChange={() => setLauncher(o.value)}
+                className="mt-0.5 accent-brand-500"
+              />
+              <span>
+                <span className="block text-sm text-zinc-800">{o.label}</span>
+                <span className="block text-xs text-zinc-500">{o.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-2.5 rounded-lg bg-zinc-50 ring-1 ring-zinc-200 px-3 py-2.5">
+          <p className="text-xs text-zinc-600">
+            Any element on your site with <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-open</code> opens
+            the chat, for example a link in your mobile menu.{' '}
+            <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-toggle</code> and{' '}
+            <code className="text-[11px] bg-white ring-1 ring-zinc-200 rounded px-1">data-chatliox-close</code> work the same way.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 min-w-0 truncate text-[11px] text-zinc-700 bg-white ring-1 ring-zinc-200 rounded px-2 py-1.5">{OWN_BUTTON_SNIPPET}</code>
+            <button
+              type="button"
+              onClick={() =>
+                navigator.clipboard.writeText(OWN_BUTTON_SNIPPET).then(() => {
+                  setCopiedButton(true)
+                  setTimeout(() => setCopiedButton(false), 2_000)
+                })
+              }
+              className={`flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg ring-1 ${
+                copiedButton ? 'ring-emerald-300 bg-emerald-50 text-emerald-700' : 'ring-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100'
+              }`}
+            >
+              {copiedButton ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -635,11 +801,44 @@ function WidgetAppearanceCard({
         {!iconUrlValid && <p className="text-xs text-red-500 mt-1">Must be a full http(s) image URL.</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <NumberField label="Panel width" value={width} onChange={setWidth} min={320} max={520} />
-        <NumberField label="Panel height" value={height} onChange={setHeight} min={400} max={800} />
-        <NumberField label="Side offset" value={offsetX} onChange={setOffsetX} min={0} max={200} />
-        <NumberField label="Bottom offset" value={offsetY} onChange={setOffsetY} min={0} max={200} />
+      <div>
+        <p className="text-xs font-medium text-zinc-700">Size and spacing</p>
+        <p className="text-[11px] text-zinc-400 mt-0.5 mb-1.5">In pixels. Move the launcher in if it covers something on your site.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <NumberField label="Width" value={width} onChange={setWidth} min={320} max={520} />
+          <NumberField label="Height" value={height} onChange={setHeight} min={400} max={800} />
+          <NumberField label="From side" value={offsetX} onChange={setOffsetX} min={0} max={200} />
+          <NumberField label="From bottom" value={offsetY} onChange={setOffsetY} min={0} max={200} />
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="widget-css" className="text-xs font-medium text-zinc-700">Custom CSS</label>
+        <p className="text-[11px] text-zinc-400 mt-0.5 mb-1.5">
+          Restyle or move anything: the button, the chat window, the messages. Your rules always win over ours, so
+          there's no need for <code>!important</code>. It applies on your site, not in this preview.
+        </p>
+        <textarea
+          id="widget-css"
+          value={customCss}
+          onChange={(e) => setCustomCss(e.target.value)}
+          rows={7}
+          maxLength={20_000}
+          spellCheck={false}
+          placeholder={CSS_EXAMPLE}
+          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition resize-y"
+        />
+        <details className="mt-1.5 text-xs text-zinc-500">
+          <summary className="cursor-pointer select-none text-zinc-600 hover:text-zinc-900">Parts you can style</summary>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            {CSS_PARTS.map(([selector, what]) => (
+              <Fragment key={selector}>
+                <dt><code className="text-[11px] text-zinc-800">{selector}</code></dt>
+                <dd>{what}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </details>
       </div>
 
       <button
@@ -652,8 +851,61 @@ function WidgetAppearanceCard({
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save changes'}
       </button>
     </div>
+
+    <div className="lg:sticky lg:top-6 flex flex-col gap-2">
+      <p className="text-xs font-medium text-zinc-500">What visitors see</p>
+      <WidgetPreview
+        brandColor={/^#[0-9a-fA-F]{6}$/.test(color) ? color : org?.widget_color ?? '#4f6ef7'}
+        teamName={org?.name ?? 'Support'}
+        greeting={greeting.trim() || 'Send us a message and we\'ll get back to you shortly.'}
+        position={position}
+        replyWithinMinutes={org?.first_response_minutes ?? null}
+        welcomeMessages={org?.welcome_messages ?? []}
+        quickReplies={org?.quick_replies ?? []}
+        state="open"
+        pageUrl={`https://${(org?.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')}.com/`}
+      />
+    </div>
+    </div>
   )
 }
+
+const WIDGET_CORNERS: { value: WidgetPosition; label: string }[] = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'left', label: 'Bottom left' },
+  { value: 'right', label: 'Bottom right' },
+]
+
+const WIDGET_LAUNCHER_OPTIONS: { value: WidgetLauncher; label: string; hint: string }[] = [
+  { value: 'always', label: 'On every device', hint: 'The round chat button sits in the corner you picked.' },
+  { value: 'desktop', label: 'On computers only', hint: 'On phones, open the chat from your own button or menu instead.' },
+  { value: 'never', label: 'Never', hint: 'Only your own buttons open the chat.' },
+]
+
+const OWN_BUTTON_SNIPPET = '<button data-chatliox-open>Chat with us</button>'
+
+const CSS_EXAMPLE = `/* Example: a square button that sits higher on phones */
+.chatliox-launcher { border-radius: 14px; }
+@media (max-width: 640px) {
+  .chatliox { --chatliox-offset-y: 88px; }
+}`
+
+const CSS_PARTS: [string, string][] = [
+  ['.chatliox', 'Everything on your site. Set --chatliox-color, --chatliox-offset-x, --chatliox-offset-y, --chatliox-width, --chatliox-height or --chatliox-launcher-size here'],
+  ['.chatliox-launcher', 'The round chat button'],
+  ['.chatliox[data-open="true"]', 'While the chat is open'],
+  ['.chatliox-badge', 'Unread count on the button'],
+  ['.chatliox-frame', 'The chat window on your page'],
+  ['.chatliox-teaser', 'Proactive message pop-up'],
+  ['.chatliox-header', 'Top of the chat window'],
+  ['.chatliox-close', 'Close button inside the chat window'],
+  ['.chatliox-message--visitor', "The visitor's messages"],
+  ['.chatliox-message--team', "Your team's messages"],
+  ['.chatliox-team-message', 'Welcome messages'],
+  ['.chatliox-quick-reply', 'Quick-reply buttons'],
+  ['.chatliox-input, .chatliox-send', 'Message box and send button'],
+]
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -1020,7 +1272,7 @@ function AutoAssignCard({ user, token, setAuth }: OrgSettingProps) {
   return (
     <SwitchCard
       title="Auto-assign new chats"
-      description="Each new chat goes to the next teammate in turn, among those with the dashboard open. If nobody is online, it stays unassigned until someone replies."
+      description="Hand each new chat to the next teammate who has the dashboard open, taking turns. When nobody is online, chats wait unassigned until someone replies."
       enabled={user?.organization.auto_assign ?? false}
       update={updateAutoAssign}
       errorText="Couldn't update auto-assignment. Please try again."
@@ -1289,7 +1541,44 @@ function NavBtn({
   )
 }
 
+function waitedFor(since: string, now: number): string {
+  const minutes = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000))
+  if (minutes < 1) return 'under a minute'
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours} h ${minutes % 60} min` : `${Math.floor(hours / 24)} days`
+}
+
+// With no chat open: what's waiting and a way straight to it, or, before the
+// first chat ever arrives, how to get the widget onto the site.
 function EmptyState({ onInstall, copied }: { onInstall: () => void; copied: boolean }) {
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const now = useNow()
+  const { data: conversations = [], isLoading } = useQuery({ queryKey: ['conversations'], queryFn: () => getConversations() })
+  if (isLoading) return null
+
+  const waiting = conversations
+    .filter((c) => c.status === 'waiting')
+    .sort((a, b) => (a.waiting_since ?? a.created_at).localeCompare(b.waiting_since ?? b.created_at))
+  const oldest = waiting[0]
+  const mine = conversations.filter((c) => c.status !== 'closed' && c.assigned_to_id === user?.id).length
+  const unassigned = conversations.filter((c) => c.status !== 'closed' && !c.assigned_to_id).length
+  const firstChat = conversations.length === 0
+
+  const installButton = (
+    <button
+      onClick={onInstall}
+      className={`w-full text-sm font-medium py-2.5 rounded-xl ring-1 transition-all duration-200 ${
+        copied
+          ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
+          : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
+      }`}
+    >
+      {copied ? '✓ Embed code copied!' : 'Copy widget install snippet'}
+    </button>
+  )
+
   return (
     <div className="h-full flex items-center justify-center p-8">
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-zinc-200 p-10 flex flex-col items-center gap-5 text-center max-w-sm w-full">
@@ -1298,23 +1587,63 @@ function EmptyState({ onInstall, copied }: { onInstall: () => void; copied: bool
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
           </svg>
         </div>
-        <div>
-          <p className="font-semibold text-zinc-900 tracking-tight">No conversation selected</p>
-          <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
-            Select a thread from the inbox to start replying, or install your chat widget to begin receiving messages.
-          </p>
-        </div>
-        <button
-          onClick={onInstall}
-          className={`w-full text-sm font-medium py-2.5 rounded-xl ring-1 transition-all duration-200 ${
-            copied
-              ? 'ring-emerald-300 bg-emerald-50 text-emerald-700'
-              : 'ring-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100'
-          }`}
-        >
-          {copied ? '✓ Embed code copied!' : 'Copy widget install snippet'}
-        </button>
+
+        {firstChat ? (
+          <>
+            <div>
+              <p className="font-semibold text-zinc-900 tracking-tight">Waiting for your first chat</p>
+              <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+                Add the widget to your site and chats appear here as soon as a visitor writes.
+              </p>
+            </div>
+            <ol className="w-full text-left flex flex-col gap-2.5 text-sm">
+              <li className="flex gap-2.5"><Step n={1} />Copy the install snippet below.</li>
+              <li className="flex gap-2.5"><Step n={2} />Paste it before <code className="text-xs bg-zinc-100 rounded px-1">&lt;/body&gt;</code> on every page.</li>
+              <li className="flex gap-2.5"><Step n={3} />Open your site and say hello to test it.</li>
+            </ol>
+            {installButton}
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="font-semibold text-zinc-900 tracking-tight">
+                {waiting.length === 0 ? "You're all caught up" : waiting.length === 1 ? '1 visitor is waiting' : `${waiting.length} visitors are waiting`}
+              </p>
+              <p className="text-sm text-zinc-500 mt-1.5 leading-relaxed">
+                {oldest
+                  ? `The longest has waited ${waitedFor(oldest.waiting_since ?? oldest.created_at, now)}.`
+                  : 'Nobody needs a reply right now. New chats show up in the list as they arrive.'}
+              </p>
+            </div>
+            <dl className="w-full grid grid-cols-2 gap-2">
+              <div className="bg-zinc-50 rounded-xl py-3">
+                <dd className="text-xl font-semibold text-zinc-900 tabular-nums">{mine}</dd>
+                <dt className="text-xs text-zinc-500 mt-0.5">Assigned to you</dt>
+              </div>
+              <div className="bg-zinc-50 rounded-xl py-3">
+                <dd className="text-xl font-semibold text-zinc-900 tabular-nums">{unassigned}</dd>
+                <dt className="text-xs text-zinc-500 mt-0.5">Unassigned</dt>
+              </div>
+            </dl>
+            {oldest ? (
+              <button
+                onClick={() => navigate(`/app/c/${oldest.id}`)}
+                className="w-full text-sm font-medium py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white transition-colors duration-200"
+              >
+                Open the longest wait
+              </button>
+            ) : installButton}
+          </>
+        )}
       </div>
     </div>
+  )
+}
+
+function Step({ n }: { n: number }) {
+  return (
+    <span className="w-5 h-5 flex-shrink-0 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold flex items-center justify-center" aria-hidden>
+      {n}
+    </span>
   )
 }
