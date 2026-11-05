@@ -235,8 +235,8 @@ function Row({
       onClick={onClick}
       className={`w-full text-left flex items-center gap-3 px-4 py-3 border-l-2 transition-all duration-150 ${
         isActive
-          ? 'bg-zinc-50 border-l-indigo-500'
-          : 'border-l-transparent hover:bg-zinc-50'
+          ? 'bg-zinc-100 border-l-zinc-900'
+          : 'border-l-transparent hover:bg-zinc-100/60'
       }`}
     >
       {/* Avatar */}

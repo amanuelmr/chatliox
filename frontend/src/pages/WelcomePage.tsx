@@ -25,7 +25,7 @@ export default function WelcomePage() {
   const inviteUrl = `${window.location.origin}/join/${inviteToken}`
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-page flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <Logo className="h-10 w-auto mb-5" variant="dark" />

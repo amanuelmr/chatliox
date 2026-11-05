@@ -47,7 +47,7 @@ export default function EngageView() {
   }
 
   return (
-    <main className="flex-1 bg-zinc-100 overflow-auto">
+    <main className="flex-1 bg-page overflow-auto">
       <div className="max-w-6xl mx-auto py-10 px-6 flex flex-col gap-6">
         <header>
           <h1 className="font-display text-2xl font-semibold text-zinc-900 tracking-tight">Engage</h1>

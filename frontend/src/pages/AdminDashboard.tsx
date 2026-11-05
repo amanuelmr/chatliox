@@ -71,7 +71,7 @@ export default function AdminDashboard() {
     : '?'
 
   return (
-    <div className="h-screen flex overflow-hidden bg-zinc-100">
+    <div className="h-screen flex overflow-hidden bg-page">
 
       {/* ── Slim nav (56px) ──────────────────────────────────────────────────── */}
       <nav className="w-14 bg-white border-r border-zinc-200 flex flex-col items-center py-4 flex-shrink-0">
@@ -166,7 +166,7 @@ export default function AdminDashboard() {
           </aside>
 
           {/* ── Workspace canvas ─────────────────────────────────────────────── */}
-          <main className="flex-1 bg-zinc-100 overflow-hidden min-w-0">
+          <main className="flex-1 bg-page overflow-hidden min-w-0">
             {id
               ? <AdminChatWindow conversationId={id} />
               : <EmptyState onInstall={copyEmbed} copied={copied} />
@@ -261,7 +261,7 @@ function AnalyticsView() {
 
   if (isLoading || !data) {
     return (
-      <main className="flex-1 bg-zinc-100 flex items-center justify-center">
+      <main className="flex-1 bg-page flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-zinc-200 border-t-zinc-500 animate-spin" />
       </main>
     )
@@ -270,7 +270,7 @@ function AnalyticsView() {
   const maxDaily = Math.max(1, ...data.volume_by_day.map((d) => d.count))
 
   return (
-    <main className="flex-1 bg-zinc-100 overflow-auto">
+    <main className="flex-1 bg-page overflow-auto">
       <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">Analytics</h2>
@@ -463,7 +463,7 @@ function SettingsView({
   }
 
   return (
-    <main className="flex-1 bg-zinc-100 overflow-auto">
+    <main className="flex-1 bg-page overflow-auto">
       <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">Settings</h2>
