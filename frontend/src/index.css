@@ -1,3 +1,37 @@
+@import './theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html.cave body {
+    @apply bg-page text-zinc-900 antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+
+  /* Headings run tight, like display type should. */
+  .cave h1,
+  .cave h2 {
+    letter-spacing: -0.025em;
+  }
+
+  .cave ::selection {
+    background: rgb(var(--zinc-800));
+    color: rgb(var(--white));
+  }
+
+  .cave ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .cave ::-webkit-scrollbar-thumb {
+    background: rgb(var(--zinc-200));
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  .cave ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

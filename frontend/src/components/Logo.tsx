@@ -6,9 +6,9 @@ interface Props {
 }
 
 const COLORS = {
-  dark: '#18181b',
-  light: '#ffffff',
-  brand: '#4f6ef7',
+  dark: 'rgb(var(--zinc-900))',
+  light: 'rgb(var(--white))',
+  brand: 'rgb(var(--brand-500))',
 }
 
 export default function Logo({ className = '', variant = 'dark', alt = 'Chatliox' }: Props) {
