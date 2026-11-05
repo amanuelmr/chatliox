@@ -37,7 +37,7 @@ export default function WidgetPreview(props: Props) {
   const side = `${position.endsWith('left') ? 'left-4 items-start' : 'right-4 items-end'} ${top ? 'top-4 flex-col-reverse' : 'bottom-4 flex-col'}`
 
   return (
-    <figure className="rounded-2xl bg-white ring-1 ring-zinc-200 shadow-[0_24px_60px_-28px_rgba(24,24,27,0.35)] overflow-hidden" aria-label="Widget preview">
+    <figure className="light-scope rounded-2xl bg-white ring-1 ring-zinc-200 shadow-[0_24px_60px_-28px_rgba(24,24,27,0.35)] overflow-hidden" aria-label="Widget preview">
       {/* Address bar */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-100 bg-zinc-50">
         <span className="flex gap-1.5" aria-hidden>

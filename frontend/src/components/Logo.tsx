@@ -3,21 +3,24 @@ interface Props {
   /** 'dark' = black (light bg) | 'light' = white (dark bg) | 'brand' = brand-500 */
   variant?: 'dark' | 'light' | 'brand'
   alt?: string
+  /** Just the speech-bubble mark, without the wordmark under it. */
+  markOnly?: boolean
 }
 
 const COLORS = {
-  dark: '#18181b',
-  light: '#ffffff',
-  brand: '#4f6ef7',
+  dark: 'rgb(var(--zinc-900))',
+  light: 'rgb(var(--white))',
+  brand: 'rgb(var(--brand-500))',
 }
 
-export default function Logo({ className = '', variant = 'dark', alt = 'Chatliox' }: Props) {
+export default function Logo({ className = '', variant = 'dark', alt = 'Chatliox', markOnly = false }: Props) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="265 325 515 370"
-      aria-label={alt}
-      role="img"
+      viewBox={markOnly ? '368 330 280 196' : '265 325 515 370'}
+      aria-label={alt || undefined}
+      aria-hidden={alt ? undefined : true}
+      role={alt ? 'img' : undefined}
       className={className}
       style={{ color: COLORS[variant] }}
     >

@@ -475,10 +475,6 @@ function Content() {
           a: 'Yes. The same widget key works across any number of domains. All conversations from all domains land in the same inbox.',
         },
         {
-          q: 'Is there a per-seat charge for adding agents?',
-          a: 'No. You can add as many agents as you need at no extra cost. The goal is to get your whole team in without budget arguments.',
-        },
-        {
           q: 'What happens if no agent is online?',
           a: "The visitor's message is stored. When an agent logs in and opens the conversation, they'll see the full history and can reply normally.",
         },

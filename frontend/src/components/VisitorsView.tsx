@@ -29,7 +29,7 @@ export default function VisitorsView({ onOpenChat }: { onOpenChat: (conversation
   const sorted = [...visitors].sort((a, b) => b.arrived_at.localeCompare(a.arrived_at))
 
   return (
-    <main className="flex-1 bg-zinc-100 overflow-auto">
+    <main className="flex-1 bg-page overflow-auto">
       <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-semibold text-zinc-900 tracking-tight">Visitors on your site</h2>
