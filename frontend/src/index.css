@@ -70,9 +70,19 @@
   }
 
   /* Faint star field behind hero sections. */
-  /* Soft light falling from the top of hero sections. */
+  /* Soft light falling from the top of hero sections; the stars themselves are a canvas. */
   .starfield {
     background-image: radial-gradient(ellipse 60% 45% at 50% 0%, rgb(var(--zinc-200) / 0.55), transparent 70%);
+  }
+
+  /* Constellation points brighten and fade in turn. */
+  .constellation-glow {
+    animation: constellation-glow 4s linear infinite;
+  }
+
+  /* The hero's speech-bubble constellations bob slowly, out of step with each other. */
+  .float-slow {
+    animation: float-slow 9s ease-in-out infinite;
   }
 
   /* Announcement ticker: the item list is rendered twice, so -50% loops seamlessly. */
@@ -117,9 +127,21 @@
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
 }
 
+@keyframes constellation-glow {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 1; }
+}
+
+@keyframes float-slow {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -14px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .float-slow,
   .ticker-track,
-  .wire-pulse {
+  .wire-pulse,
+  .constellation-glow {
     animation: none;
   }
 }

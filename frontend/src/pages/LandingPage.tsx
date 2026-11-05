@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from '@/components/Logo'
+import StarField from '@/components/landing/StarField'
 
 // ─── Small pieces ────────────────────────────────────────────────────────────
 
@@ -154,16 +155,24 @@ function BubbleConstellation({ flip = false }: { flip?: boolean }) {
   return (
     <svg
       viewBox="0 0 340 330"
-      className={`hidden lg:block absolute top-32 w-[300px] xl:w-[340px] opacity-60 pointer-events-none ${flip ? 'right-[4%] -scale-x-100' : 'left-[4%]'}`}
+      className={`float-slow hidden lg:block absolute top-32 w-[300px] xl:w-[340px] opacity-60 pointer-events-none ${flip ? 'right-[4%] -scale-x-100 [animation-delay:-4.5s]' : 'left-[4%]'}`}
       aria-hidden
     >
       <path d={d} fill="none" stroke="rgb(var(--zinc-400))" strokeOpacity="0.45" strokeWidth="0.75" />
       {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={i % 3 === 0 ? 2.4 : 1.6} fill="rgb(var(--zinc-800))" />
+        <circle
+          key={i}
+          cx={x}
+          cy={y}
+          r={i % 3 === 0 ? 2.4 : 1.6}
+          fill="rgb(var(--zinc-800))"
+          className="constellation-glow"
+          style={{ animationDelay: `${-i * 370}ms` }}
+        />
       ))}
       <path d="M110 120 L170 132 L230 120" fill="none" stroke="rgb(var(--zinc-400))" strokeOpacity="0.35" strokeWidth="0.75" strokeDasharray="2 4" />
       {inner.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill="rgb(var(--zinc-900))" />
+        <circle key={i} cx={x} cy={y} r="3" fill="rgb(var(--zinc-900))" className="constellation-glow" style={{ animationDelay: `${-(i + 4) * 370}ms` }} />
       ))}
     </svg>
   )
@@ -172,6 +181,7 @@ function BubbleConstellation({ flip = false }: { flip?: boolean }) {
 function Hero() {
   return (
     <section id="product" className="starfield relative bg-black pt-24 md:pt-28 pb-16 px-5 overflow-hidden">
+      <StarField className="[mask-image:linear-gradient(to_bottom,black_55%,transparent)]" />
       <BubbleConstellation />
       <BubbleConstellation flip />
       <div className="relative flex flex-col items-center text-center">
@@ -667,6 +677,7 @@ function Proof() {
 function FinalCTA() {
   return (
     <section className="starfield relative overflow-hidden px-5 pt-32 pb-28 text-center">
+      <StarField density={0.8} />
       <div className="relative">
       <p className="eyebrow">Get started</p>
       <h2 className="mx-auto mt-8 max-w-[14ch] text-[3rem] sm:text-[4.5rem] lg:text-[5.6rem] font-medium leading-[0.98] tracking-[-0.055em] text-zinc-900">
