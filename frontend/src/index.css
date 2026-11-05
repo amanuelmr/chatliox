@@ -35,3 +35,91 @@
     background: transparent;
   }
 }
+
+@layer components {
+  /* Primary call to action: a light pill with the arrow in its own inset chip. */
+  .btn-pill {
+    @apply inline-flex h-[42px] items-center gap-3 rounded-[14px] border border-white bg-brand-500 pl-[17px] pr-[7px] text-[13px] font-semibold tracking-[-0.015em] text-[#171717] transition hover:bg-brand-600;
+  }
+  .btn-pill-lg {
+    @apply h-[50px] pl-5 pr-[9px];
+  }
+  .btn-pill-chip {
+    @apply flex h-[27px] w-[27px] items-center justify-center rounded-[9px] bg-[#dedede] text-[#171717] transition;
+  }
+  .btn-pill-lg .btn-pill-chip {
+    @apply h-[30px] w-[30px];
+  }
+  .btn-pill:hover .btn-pill-chip {
+    @apply bg-[#d2d2d2];
+  }
+  /* Secondary: same shape, dark fill and a hairline border. */
+  .btn-ghost {
+    @apply inline-flex h-[42px] items-center gap-3 rounded-[14px] border border-[#383838] bg-[#141414] px-[17px] text-[13px] font-semibold tracking-[-0.015em] text-[#dddddd] transition hover:border-[#4a4a4a] hover:text-white;
+  }
+  .btn-ghost.btn-pill-lg {
+    @apply pr-[9px];
+  }
+  .btn-ghost .btn-pill-chip {
+    @apply bg-[#262626] text-[#dddddd];
+  }
+
+  /* Small mono label used for eyebrows, figure captions and fact headings. */
+  .eyebrow {
+    @apply font-mono text-[12px] uppercase leading-none tracking-[0.1em] text-zinc-500;
+  }
+
+  /* Faint star field behind hero sections. */
+  /* Soft light falling from the top of hero sections. */
+  .starfield {
+    background-image: radial-gradient(ellipse 60% 45% at 50% 0%, rgb(var(--zinc-200) / 0.55), transparent 70%);
+  }
+
+  /* Announcement ticker: the item list is rendered twice, so -50% loops seamlessly. */
+  .ticker-track {
+    animation: ticker 60s linear infinite;
+  }
+  .ticker-track:hover {
+    animation-play-state: paused;
+  }
+
+  /* A dot travelling along a dashed wire in the system figure. */
+  .wire-pulse {
+    animation: wire-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Perspective-free floor grid behind figures. */
+  .grid-floor {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: center;
+  }
+
+  /* Big wordmark drawn in dots, for the footer. */
+  .dot-type {
+    background-image: radial-gradient(circle at center, rgb(var(--zinc-900)) 1.7px, transparent 2.1px);
+    background-size: 7px 7px;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes wire-pulse {
+  0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.8); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track,
+  .wire-pulse {
+    animation: none;
+  }
+}
